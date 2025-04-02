@@ -956,22 +956,41 @@
         // Block platzieren
         function placeBlock() {
             if (blocksCount > 0) {
-                // Block hinter dem Spieler platzieren
-                const dx = player.x - player.lastX;
-                const dy = player.y - player.lastY;
+                // Statt Bewegungsdifferenz zu verwenden, nutze die Spielerrichtung
+                let blockX = player.x;
+                let blockY = player.y;
                 
-                if (dx === 0 && dy === 0) return; // Spieler hat sich nicht bewegt
-                
-                const blockX = player.x - dx;
-                const blockY = player.y - dy;
+                // Basierend auf der Richtung des Spielers (0=oben, 1=rechts, 2=unten, 3=links)
+                switch (player.direction) {
+                    case 0: // Oben
+                        blockY = player.y - 1;
+                        break;
+                    case 1: // Rechts
+                        blockX = player.x + 1;
+                        break;
+                    case 2: // Unten
+                        blockY = player.y + 1;
+                        break;
+                    case 3: // Links
+                        blockX = player.x - 1;
+                        break;
+                }
                 
                 // Prüfen, ob Position gültig ist
-                if (!isWall(blockX, blockY) && !isEnemy(blockX, blockY) && !isBarrel(blockX, blockY) && !isBlock(blockX, blockY)) {
+                if (!isWall(blockX, blockY) && !isEnemy(blockX, blockY) && 
+                    !isBarrel(blockX, blockY) && !isBlock(blockX, blockY) &&
+                    (blockX !== exit.x || blockY !== exit.y)) { // Nicht auf dem Ausgang platzieren
+                    
                     blocks.push({ x: blockX, y: blockY });
                     blocksCount--;
                     updateUI();
                     audioManager.playSound('placeBlock');
+                    console.log(`Block platziert an Position (${blockX},${blockY}), Richtung: ${player.direction}`);
+                } else {
+                    console.log(`Konnte Block nicht platzieren an Position (${blockX},${blockY}), Richtung: ${player.direction}`);
                 }
+            } else {
+                console.log("Keine Blöcke mehr verfügbar");
             }
         }
         
