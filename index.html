@@ -165,6 +165,12 @@
                 </div>
             </div>
             
+            <!-- Audio-Einstellungen -->
+            <div style="margin: 20px 0;">
+                <label for="sound-toggle" style="color: white; margin-right: 10px;">Sound:</label>
+                <button id="sound-toggle" style="background-color: #00aa00; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;">An</button>
+            </div>
+            
             <button id="start-button">Spiel starten</button>
         </div>
     </div>
@@ -174,6 +180,72 @@
         let GRID_WIDTH = 64;
         let GRID_HEIGHT = 32;
         const CELL_SIZE = 20; // Pixel pro Zelle - kleiner, um mehr Platz zu haben
+        
+        // Audio-System
+        class AudioManager {
+            constructor() {
+                this.sounds = {};
+                this.soundEnabled = true;
+                this.loadSounds();
+            }
+            
+            loadSounds() {
+                // Definiere verschiedene Soundeffekte mit Base64-encodierten MP3s
+                // Diese kurzen Audiodaten sind direkt im Spiel integriert ohne externe Dateien
+                
+                // Bewegung - kurzes Klick-Geräusch
+                this.sounds.move = new Audio("data:audio/mp3;base64,SUQzAwAAAAAAJlRQRTEAAAAcAAAAU291bmRKYXkuY29tIFNvdW5kIEVmZmVjdHMAVEVOQwAAABcAAABMYXZmNTguNzYuMTAwIGxpYnNuZGZmdhgAAAAA//tAwAAAxEgNwRQAAGmIjg2AEAAB3/ggAjR8EO56IABmx8J+JAQH7xO/LnEBAHOCJGiIiaET8eEABPnhHx8Q+X8EAIH4ICAgBAQEDwgIPggICAQEHxAQEPnhAQEPnz54ICBA8EBAICB88Q+XBAQOcICAhwQICB+8Q+eEPnh8ICHz");
+                
+                // Block platzieren - härterer Klick-Sound
+                this.sounds.placeBlock = new Audio("data:audio/mp3;base64,SUQzAwAAAAAAJlRQRTEAAAAcAAAAU291bmRKYXkuY29tIFNvdW5kIEVmZmVjdHMAVEVOQwAAABcAAABMYXZmNTguNzYuMTAwIGxpYnNuZGZmdhgAAAAA//tAwAAAxHgJwRwMAEoILc2gFAQAQRAQEBAQEBAgICAhwQEBAQOCAgICAgICAgICAgICAgICAgICAgQOCHBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQECAgICBAQEBAQP3hAgQEBAQICAgICBAuCAs0IA0RMQCBwghxwh4Q8HzwgICA8EBAQEBAQED94QEBAQECAgICB++f3hA/eECAgIEH7wgQIHz");
+                
+                // Plutonium aufsammeln - Geiger-Zähler-artiges Geräusch
+                this.sounds.collectPlutonium = new Audio("data:audio/mp3;base64,SUQzAwAAAAAAJlRQRTEAAAAcAAAAU291bmRKYXkuY29tIFNvdW5kIEVmZmVjdHMAVEVOQwAAABcAAABMYXZmNTguNzYuMTAwIGxpYnNuZGZmdhgAAAAA//tAwAAAxKUKQYQlAA6Q1hYAgAABE4WqYU9gAMZzEYk3cEwiLYxrEL1IhbREWoLQi1CEIQhCEOCEJwhCEJ84QhCEIQhCELP64sQtiFtYi1sQiLEIQkOLUhahYQtDFrCzFqFhCEJDmFhCwsLUhCELCwhCE4Q54tCF+8LCEIXHCEJD5whCEIdatYWFnCEIQhCEIQnDFC3PCEL3hCeZx7x73Lhy5cuEIS4XM4QnCZlwuEIQvnCF64QvxCFwvaXLhfd7ve5cuFy7wvfC9+");
+                
+                // Plutonium in Tonne ablegen - "Erfolgs"-Sound
+                this.sounds.depositPlutonium = new Audio("data:audio/mp3;base64,SUQzAwAAAAAAJlRQRTEAAAAcAAAAU291bmRKYXkuY29tIFNvdW5kIEVmZmVjdHMAVEVOQwAAABcAAABMYXZmNTguNzYuMTAwIGxpYnNuZGZmdhgAAAAA//tAwAAAxLcFwZwMALJgchjBAAA90IQhCEH7whCEJ84QhCFwhCEIQ5wizWaP/4X/CwszFqCzYWZbULULNhYWFhbcLazYWfwsK34W1C2oQvmsLFixZs1mi1WaxZrP/hZ/Cz+Fn8LP4QhMQtQtQtQsIWHjhCwsLELPGFixZs2axZs1n/xZs1mixZrNms/+EIXP7CEIQ5whCZwhCEOcIXeEL1rCwvrC+sLC+sQtQsIXeIXeIXviF3vi");
+                
+                // Block aufsammeln - leichtes Aufhebe-Geräusch
+                this.sounds.collectBlock = new Audio("data:audio/mp3;base64,SUQzAwAAAAAAJlRQRTEAAAAcAAAAU291bmRKYXkuY29tIFNvdW5kIEVmZmVjdHMAVEVOQwAAABcAAABMYXZmNTguNzYuMTAwIGxpYnNuZGZmdhgAAAAA//tAwAAAxMgM4YwkAKRQLgmAAQABLF7Fy5cuXLF/5YsWLFixYsWbNZrNZotFixZs1mis2VlZWbKysrNlZWVlZsrKzZs2bNmzWaLFixYsWLFixYsX/lixYsWLl8uXLly5cuXLly5cuXLly5cuXLl8uXv/Lly5fLly5e/8uX//Ll/5f/8v/+X//L//ly5fLly+XLl7/y5fLly5e/8uXL//ly//5f/8v/+XLly5e/8uX//Lnwuf");
+                
+                // Kollision mit Feind - Verletzungs-Sound
+                this.sounds.enemyCollision = new Audio("data:audio/mp3;base64,SUQzAwAAAAAAJlRQRTEAAAAcAAAAU291bmRKYXkuY29tIFNvdW5kIEVmZmVjdHMAVEVOQwAAABcAAABMYXZmNTguNzYuMTAwIGxpYnNuZGZmdhgAAAAA//tAwAAAxO8vwZAkAKSIbg5gIAAB8/7/6qqqqqqqqiIiIiIi7uERERERF3cREXe7h3dVVVVVVUREREREXcIiIiIiIiIu7hERERF3u4d3d3d3d7u7u7vu7u6qqqqqqqIiIiIiIiIu4REREXdwiIiIiIu7u7u7u7uqqqqqqqoiIiIiIiIu4REREXERERF3cIiIiLu7u7u7u7urqqqqqqoiIiIiIi7hERF3cIiIu7uHd3d3d1VVVVVVREREREXcIiIiIi7hERF3dw7u7u7u7u7uqqqq");
+                
+                // Level abgeschlossen - Fanfare
+                this.sounds.levelComplete = new Audio("data:audio/mp3;base64,SUQzAwAAAAAAJlRQRTEAAAAcAAAAU291bmRKYXkuY29tIFNvdW5kIEVmZmVjdHMAVEVOQwAAABcAAABMYXZmNTguNzYuMTAwIGxpYnNuZGZmdhgAAAAA//tAwAAAxNoXQZwkALBwbg5gAAAB//Qn6E/SP0J+hfof7d97T9C/QnCE/Qn6E/Qn6E/Qn6D9CcIQnCfIT9J+3p+k/aT9vT9Cfo/30J+hP0HCE4QhOEIQnCEJwhCEIQnCEJwhCEIQhCEIQhCEJwhCEIXf70J+hP0J+hP0H6E/Qn6E/Qn6E/Qn6E/YfvSft6ftH7Tv1vT9v97pP0n7en6E/Qfon3rH3nyfef2j90/aP1H6R+sfqP0j9B+9Y+8/eP2j9R+o/cfpH3n6R+o/UP3H6B+o/SfvP3pP0n7R+wfd/wD+UAABJn4");
+                
+                // Game Over - düsterer Ton
+                this.sounds.gameOver = new Audio("data:audio/mp3;base64,SUQzAwAAAAAAJlRQRTEAAAAcAAAAU291bmRKYXkuY29tIFNvdW5kIEVmZmVjdHMAVEVOQwAAABcAAABMYXZmNTguNzYuMTAwIGxpYnNuZGZmdhgAAAAA//tAwAAAxLcJQZwkAKxAbg5gAAAB///AAABJJJJJJAAACSSSSSSAAAJJJJJJQAABJJJJJJIAAASSSSSSSHFtvTbbbbb2yScbJJJJJJJJJJJJJJLJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJIeWWbcskkkkkkhJJJJJJJJJJJJJJJJIJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ");
+                
+                // Spielstart - Intro-Sound
+                this.sounds.gameStart = new Audio("data:audio/mp3;base64,SUQzAwAAAAAAJlRQRTEAAAAcAAAAU291bmRKYXkuY29tIFNvdW5kIEVmZmVjdHMAVEVOQwAAABcAAABMYXZmNTguNzYuMTAwIGxpYnNuZGZmdhgAAAAA//tAwAAAxSgbMYclAAyI2djAIAABj9P///////////////////////////0/T9P0/T9P03T9N03TdN03TdN13XdV1XVdV1XVdVzNEzRMzMzMzIjMiMyIiIiIiEBAv/////////wEC////AQP////////////////T9P0/T9P0/TdP03TdN03TdN13Xdd13XVdV1XU0MzRMzMzMzIjMiMyIiIiIiEBAv/////////BAv/6fAgIED//////8CAg");
+                
+                // Timer-Warnung (wenn Plutonium-Zeit niedrig ist) - Alarmsignal
+                this.sounds.timerWarning = new Audio("data:audio/mp3;base64,SUQzAwAAAAAAJlRQRTEAAAAcAAAAU291bmRKYXkuY29tIFNvdW5kIEVmZmVjdHMAVEVOQwAAABcAAABMYXZmNTguNzYuMTAwIGxpYnNuZGZmdhgAAAAA//tAwAAAxPUXQZkMAJCJneiAAAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVQ==");
+            }
+            
+            playSound(soundName) {
+                if (!this.soundEnabled) return;
+                
+                if (this.sounds[soundName]) {
+                    // Sound stoppen falls er noch läuft und von vorne abspielen
+                    const sound = this.sounds[soundName];
+                    sound.pause();
+                    sound.currentTime = 0;
+                    sound.play().catch(error => {
+                        console.log("Konnte Sound nicht abspielen:", error);
+                    });
+                }
+            }
+            
+            toggleSound() {
+                this.soundEnabled = !this.soundEnabled;
+                return this.soundEnabled;
+            }
+        }
+        
+        // Audio-Manager initialisieren
+        const audioManager = new AudioManager();
         
         // Spielzustand
         let currentLevel = 1;
@@ -704,6 +776,7 @@
                     blocks.push({ x: blockX, y: blockY });
                     blocksCount--;
                     updateUI();
+                    audioManager.playSound('placeBlock');
                 }
             }
         }
@@ -731,6 +804,11 @@
                     !isBlock(newX, newY)) {
                     player.x = newX;
                     player.y = newY;
+                    
+                    // Bewegungssound abspielen, wenn sich die Position geändert hat
+                    if (newX !== player.lastX || newY !== player.lastY) {
+                        audioManager.playSound('move');
+                    }
                 }
                 
                 // Richtung setzen (für Darstellung)
@@ -769,6 +847,7 @@
                 collectibleBlocks.splice(blockIndex, 1);
                 blocksCount++;
                 updateUI();
+                audioManager.playSound('collectBlock');
             }
             
             // Prüfe Kollisionen mit anderen Objekten
@@ -786,6 +865,7 @@
                 plutoniumCollected = true;
                 plutoniumTimer = 20;
                 updateUI();
+                audioManager.playSound('collectPlutonium');
             }
             
             // Plutonium in Tonne abliefern
@@ -798,13 +878,26 @@
                     plutoniumTimer = 0;
                     score += 100;
                     updateUI();
+                    audioManager.playSound('depositPlutonium');
                 }
+            }
+            
+            // Block aufsammeln
+            const blockIndex = collectibleBlocks.findIndex(
+                b => Math.floor(player.visualX) === b.x && Math.floor(player.visualY) === b.y
+            );
+            if (blockIndex !== -1) {
+                collectibleBlocks.splice(blockIndex, 1);
+                blocksCount++;
+                updateUI();
+                audioManager.playSound('collectBlock');
             }
             
             // Ausgang erreichen
             if (Math.floor(player.visualX) === exit.x && Math.floor(player.visualY) === exit.y && 
                 plutonium.length === 0 && !plutoniumCollected) {
                 exitReached = true;
+                audioManager.playSound('levelComplete');
                 
                 // Level abgeschlossen, nächstes Level laden
                 if (currentLevel < maxLevel) {
@@ -832,9 +925,11 @@
         function loseLife() {
             lives--;
             updateUI();
+            audioManager.playSound('enemyCollision');
             
             if (lives <= 0) {
                 gameRunning = false;
+                audioManager.playSound('gameOver');
                 alert("Game Over! Du hast " + score + " Punkte erreicht.");
             } else {
                 // Spieler zurücksetzen
@@ -1200,6 +1295,11 @@
                 if (plutoniumCollected) {
                     plutoniumTimer -= deltaTime;
                     
+                    // Warnungssound abspielen, wenn weniger als 5 Sekunden übrig sind
+                    if (plutoniumTimer <= 5 && plutoniumTimer > 0 && Math.floor(plutoniumTimer * 2) % 2 === 0) {
+                        audioManager.playSound('timerWarning');
+                    }
+                    
                     if (plutoniumTimer <= 0) {
                         plutoniumCollected = false;
                         plutoniumTimer = 0;
@@ -1233,6 +1333,7 @@
             }
             
             document.getElementById('start-screen').classList.add('hidden');
+            audioManager.playSound('gameStart');
             init();
         });
         
@@ -1663,6 +1764,13 @@
             
             return true;
         }
+        
+        // Sound-Toggle-Button-Handler
+        document.getElementById('sound-toggle').addEventListener('click', function() {
+            const soundEnabled = audioManager.toggleSound();
+            this.textContent = soundEnabled ? 'An' : 'Aus';
+            this.style.backgroundColor = soundEnabled ? '#00aa00' : '#aa0000';
+        });
     </script>
 </body>
 </html> 
