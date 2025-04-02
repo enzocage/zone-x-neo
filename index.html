@@ -315,7 +315,11 @@
             
             // Wenn Zufallslevel gewählt wurde, generiere ein Zufallslevel
             if (isRandomLevel) {
+                console.log("Zufallslevel wird generiert statt CSV-Level zu laden");
                 generateRandomAccessibleLevel();
+                console.log("Prüfe generierte Arrays: Wände:", walls.length, "Gegner:", enemies.length, 
+                           "Plutonium:", plutonium.length, "Tonnen:", barrels.length, 
+                           "Aufsammelbare Blöcke:", collectibleBlocks.length);
                 return;
             }
             
@@ -649,6 +653,10 @@
         
         function isBlock(x, y) {
             return blocks.some(block => block.x === x && block.y === y);
+        }
+        
+        function isCollectibleBlock(x, y) {
+            return collectibleBlocks.some(block => block.x === x && block.y === y);
         }
         
         // Eingabe-Handler
@@ -1209,13 +1217,17 @@
         
         // Start-Button-Handler
         document.getElementById('start-button').addEventListener('click', function() {
+            console.log("Start-Button geklickt, isRandomLevel =", isRandomLevel);
+            
             if (isRandomLevel) {
                 // Bei Zufallslevel wird kein Level-Index benötigt
                 currentLevel = 1; // Setze trotzdem auf 1, falls später benötigt
+                console.log("Zufallslevel ausgewählt");
             } else {
                 // Level aus dem Dropdown-Menü holen
                 const levelSelect = document.getElementById('level-select');
                 currentLevel = parseInt(levelSelect.value);
+                console.log("Standard-Level ausgewählt:", currentLevel);
             }
             
             document.getElementById('start-screen').classList.add('hidden');
@@ -1279,6 +1291,8 @@
             const barrelCount = parseInt(document.getElementById("barrel-count").value);
             const plutoniumCount = parseInt(document.getElementById("plutonium-count").value);
             
+            console.log(`Einstellungen: Wände=${wallCount}, Gegner=${enemyCount}, Blöcke=${blockCount}, Tonnen=${barrelCount}, Plutonium=${plutoniumCount}`);
+            
             // Arrays zurücksetzen
             walls = [];
             enemies = [];
@@ -1299,33 +1313,71 @@
             
             // Außenwände erstellen
             createBorderWalls();
+            console.log(`Außenwände erstellt: ${walls.length} Wandelemente`);
             
             // Wandelemente erstellen und Erreichbarkeit sicherstellen
             createAccessibleWalls(wallCount);
+            console.log(`Innenwände erstellt: ${walls.length - (GRID_WIDTH * 2 + GRID_HEIGHT * 2 - 4)} von ${wallCount} angeforderten Wandelementen`);
             
             // Gegner platzieren
             for (let i = 0; i < enemyCount; i++) {
                 placeRandomElement('enemy');
             }
+            console.log(`Gegner platziert: ${enemies.length} von ${enemyCount}`);
             
             // Plutonium platzieren
             for (let i = 0; i < plutoniumCount; i++) {
                 placeRandomElement('plutonium');
             }
+            console.log(`Plutonium platziert: ${plutonium.length} von ${plutoniumCount}`);
             
             // Tonnen platzieren
             for (let i = 0; i < barrelCount; i++) {
                 placeRandomElement('barrel');
             }
+            console.log(`Tonnen platziert: ${barrels.length} von ${barrelCount}`);
             
             // Blöcke platzieren
             for (let i = 0; i < blockCount; i++) {
                 placeRandomElement('block');
             }
+            console.log(`Blöcke platziert: ${collectibleBlocks.length} von ${blockCount}`);
             
             // Startblöcke setzen
             blocksCount = 15;
             
+            // Debugging: Prüfe, ob im Level-Grid Elemente korrekt platziert sind
+            let gridDebug = Array(GRID_HEIGHT).fill().map(() => Array(GRID_WIDTH).fill('.'));
+            
+            // Markiere alle Elemente im Debug-Grid
+            walls.forEach(w => { if(w.x >= 0 && w.x < GRID_WIDTH && w.y >= 0 && w.y < GRID_HEIGHT) gridDebug[w.y][w.x] = '█'; });
+            enemies.forEach(e => { if(e.x >= 0 && e.x < GRID_WIDTH && e.y >= 0 && e.y < GRID_HEIGHT) gridDebug[e.y][e.x] = 'E'; });
+            plutonium.forEach(p => { if(p.x >= 0 && p.x < GRID_WIDTH && p.y >= 0 && p.y < GRID_HEIGHT) gridDebug[p.y][p.x] = 'P'; });
+            barrels.forEach(b => { if(b.x >= 0 && b.x < GRID_WIDTH && b.y >= 0 && b.y < GRID_HEIGHT) gridDebug[b.y][b.x] = 'B'; });
+            collectibleBlocks.forEach(c => { if(c.x >= 0 && c.x < GRID_WIDTH && c.y >= 0 && c.y < GRID_HEIGHT) gridDebug[c.y][c.x] = 'C'; });
+            gridDebug[player.y][player.x] = 'O';
+            gridDebug[exit.y][exit.x] = 'X';
+            
+            // Zähle Elemente im Grid
+            let counts = {
+                walls: 0,
+                enemies: 0,
+                plutonium: 0,
+                barrels: 0,
+                blocks: 0
+            };
+            
+            for(let y = 0; y < GRID_HEIGHT; y++) {
+                for(let x = 0; x < GRID_WIDTH; x++) {
+                    if(gridDebug[y][x] === '█') counts.walls++;
+                    else if(gridDebug[y][x] === 'E') counts.enemies++;
+                    else if(gridDebug[y][x] === 'P') counts.plutonium++;
+                    else if(gridDebug[y][x] === 'B') counts.barrels++;
+                    else if(gridDebug[y][x] === 'C') counts.blocks++;
+                }
+            }
+            
+            console.log("Grid-Elemente-Zählung:", counts);
             console.log("Zufälliges Level erfolgreich generiert");
         }
         
@@ -1361,6 +1413,8 @@
                     isPlutonium(x, y) || 
                     isBarrel(x, y) || 
                     isCollectibleBlock(x, y) ||
+                    (x === player.x && y === player.y) ||
+                    (x === exit.x && y === exit.y) ||
                     (Math.abs(x - player.x) < 3 && Math.abs(y - player.y) < 3) || // Bereich um Spieler freihalten
                     (Math.abs(x - exit.x) < 3 && Math.abs(y - exit.y) < 3)) {     // Bereich um Ausgang freihalten
                     continue;
@@ -1370,7 +1424,7 @@
             }
             
             if (!validPosition) {
-                console.warn(`Konnte keine gültige Position für ${type} finden.`);
+                console.warn(`Konnte keine gültige Position für ${type} finden nach ${maxAttempts} Versuchen.`);
                 return;
             }
             
@@ -1395,49 +1449,12 @@
                     collectibleBlocks.push({ x, y });
                     break;
             }
-        }
-        
-        // Prüfen, ob eine Position einen sammelbaren Block enthält
-        function isCollectibleBlock(x, y) {
-            return collectibleBlocks.some(block => block.x === x && block.y === y);
-        }
-        
-        // Wandelemente erstellen mit garantierter Zugänglichkeit
-        function createAccessibleWalls(count) {
-            // Versuche, so viele Wände wie möglich zu platzieren
-            let placedWalls = 0;
-            let maxAttempts = count * 3; // Mehr Versuche als tatsächlich benötigte Wände
             
-            for (let i = 0; i < maxAttempts && placedWalls < count; i++) {
-                // Zufällige Position für Wandelement
-                const x = Math.floor(Math.random() * (GRID_WIDTH - 4)) + 2;
-                const y = Math.floor(Math.random() * (GRID_HEIGHT - 4)) + 2;
-                
-                // Prüfe, ob Position bereits belegt ist oder zu nah am Spieler/Ausgang
-                if (isWall(x, y) || 
-                    (Math.abs(x - player.x) < 3 && Math.abs(y - player.y) < 3) || 
-                    (Math.abs(x - exit.x) < 3 && Math.abs(y - exit.y) < 3)) {
-                    continue;
-                }
-                
-                // Füge Wand temporär hinzu
-                walls.push({ x, y });
-                
-                // Prüfe, ob das Level noch zugänglich ist
-                if (!isLevelAccessible()) {
-                    // Wenn nicht, entferne die letzte Wand wieder
-                    walls.pop();
-                    continue;
-                }
-                
-                // Wand erfolgreich platziert
-                placedWalls++;
-            }
-            
-            console.log(`${placedWalls} von ${count} Wänden platziert`);
+            // Debug-Ausgabe für die Platzierung dieses Elements
+            console.log(`Element vom Typ ${type} an Position (${x},${y}) platziert`);
         }
         
-        // Prüfen, ob alle wichtigen Bereiche des Levels erreichbar sind
+        // Level-Zugänglichkeit prüfen
         function isLevelAccessible() {
             // Wir erstellen eine Kopie des Grids und markieren erreichbare Zellen
             // 0 = unbesucht, 1 = besucht, 2 = Wand
@@ -1445,7 +1462,9 @@
             
             // Wände markieren
             for (let wall of walls) {
-                grid[wall.y][wall.x] = 2;
+                if (wall.x >= 0 && wall.x < GRID_WIDTH && wall.y >= 0 && wall.y < GRID_HEIGHT) {
+                    grid[wall.y][wall.x] = 2;
+                }
             }
             
             // Startpunkt markieren
@@ -1478,6 +1497,7 @@
             
             // Prüfen, ob der Ausgang erreichbar ist
             if (grid[exit.y][exit.x] !== 1) {
+                console.log("Der Ausgang ist nicht erreichbar, verwerfe diese Wandplatzierung.");
                 return false;
             }
             
@@ -1493,7 +1513,55 @@
                 }
             }
             
-            return freeCount >= minFreeSpace;
+            if (freeCount < minFreeSpace) {
+                console.log(`Nicht genug freier Platz (${freeCount}/${minFreeSpace}), verwerfe diese Wandplatzierung.`);
+                return false;
+            }
+            
+            return true;
+        }
+        
+        // Wandelemente erstellen mit garantierter Zugänglichkeit
+        function createAccessibleWalls(count) {
+            // Versuche, so viele Wände wie möglich zu platzieren
+            let placedWalls = 0;
+            let maxAttempts = count * 3; // Mehr Versuche als tatsächlich benötigte Wände
+            
+            console.log(`Versuche, ${count} Wände zu platzieren mit maximal ${maxAttempts} Versuchen`);
+            
+            for (let i = 0; i < maxAttempts && placedWalls < count; i++) {
+                // Zufällige Position für Wandelement
+                const x = Math.floor(Math.random() * (GRID_WIDTH - 4)) + 2;
+                const y = Math.floor(Math.random() * (GRID_HEIGHT - 4)) + 2;
+                
+                // Prüfe, ob Position bereits belegt ist oder zu nah am Spieler/Ausgang
+                if (isWall(x, y) || 
+                    (x === player.x && y === player.y) ||
+                    (x === exit.x && y === exit.y) ||
+                    (Math.abs(x - player.x) < 3 && Math.abs(y - player.y) < 3) || 
+                    (Math.abs(x - exit.x) < 3 && Math.abs(y - exit.y) < 3)) {
+                    continue;
+                }
+                
+                // Füge Wand temporär hinzu
+                walls.push({ x, y });
+                
+                // Prüfe, ob das Level noch zugänglich ist
+                if (!isLevelAccessible()) {
+                    // Wenn nicht, entferne die letzte Wand wieder
+                    walls.pop();
+                    continue;
+                }
+                
+                // Wand erfolgreich platziert
+                placedWalls++;
+                
+                if (placedWalls % 20 === 0 || placedWalls === count) {
+                    console.log(`${placedWalls} von ${count} Wänden platziert (Versuch ${i+1})`);
+                }
+            }
+            
+            console.log(`Insgesamt ${placedWalls} von ${count} angeforderten Wandelementen platziert`);
         }
     </script>
 </body>
