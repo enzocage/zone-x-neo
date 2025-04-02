@@ -104,6 +104,24 @@
             <p>Rasterbasiertes 2D-Spiel mit 64x32 Grid und Level-Progression.</p>
             <p>Sammle alle Plutonium-Elemente und bringe sie zu den Tonnen. Erreiche dann den Ausgang.</p>
             <p>Steuerung: W, A, S, D zum Bewegen, Leertaste zum Platzieren von Blocks, Mausrad zum Zoomen.</p>
+            
+            <div class="level-selection" style="margin: 20px 0;">
+                <label for="level-select" style="margin-right: 10px; color: white;">Level auswählen:</label>
+                <select id="level-select" style="padding: 5px; border-radius: 3px; background-color: #333; color: white; border: 1px solid #555;">
+                    <option value="1">Level 1</option>
+                    <option value="2">Level 2</option>
+                    <option value="3">Level 3</option>
+                    <option value="4">Level 4</option>
+                    <option value="5">Level 5</option>
+                    <option value="6">Level 6</option>
+                    <option value="7">Level 7</option>
+                    <option value="8">Level 8</option>
+                    <option value="9">Level 9</option>
+                    <option value="10">Level 10</option>
+                    <option value="11">Level 11</option>
+                </select>
+            </div>
+            
             <button id="start-button">Spiel starten</button>
         </div>
     </div>
@@ -1139,6 +1157,10 @@
         
         // Start-Button-Handler
         document.getElementById('start-button').addEventListener('click', function() {
+            // Level aus dem Dropdown-Menü holen
+            const levelSelect = document.getElementById('level-select');
+            currentLevel = parseInt(levelSelect.value);
+            
             document.getElementById('start-screen').classList.add('hidden');
             init();
         });
