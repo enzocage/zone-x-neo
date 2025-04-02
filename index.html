@@ -1670,16 +1670,7 @@
             document.getElementById('random-level-btn').style.backgroundColor = '#555';
         });
         
-        document.getElementById('random-level-btn').addEventListener('click', function() {
-            isRandomLevel = true;
-            document.getElementById('standard-level-options').style.display = 'none';
-            document.getElementById('random-level-options').style.display = 'block';
-            document.getElementById('standard-level-btn').style.backgroundColor = '#555';
-            document.getElementById('random-level-btn').style.backgroundColor = '#00aa00';
-            
-            // Lade die Liste der gespeicherten Zufallslevels
-            updateSavedRandomLevels();
-        });
+        // Event-Listener für random-level-btn wird später im Code definiert
         
         // Slider und Input-Feld synchronisieren
         function setupSliderInputSync(sliderId, inputId) {
