@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zone X - Render-Debug</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+        #debug-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            background: rgba(0, 0, 0, 0.7);
+            color: #0f0;
+            padding: 10px;
+            font-family: monospace;
+            z-index: 9999;
+            max-width: 400px;
+        }
+        #fps-counter {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: #0f0;
+            padding: 5px;
+            font-family: monospace;
+            z-index: 9999;
+        }
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        canvas {
+            display: block;
+        }
+        .visible-borders {
+            border: 1px solid red !important;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+</head>
+<body>
+    <div id="debug-overlay">
+        <h3>Render-Debug</h3>
+        <div id="debug-info">Initialisiere...</div>
+        <div>
+            <button id="toggle-wireframe">Wireframe: AUS</button>
+            <button id="toggle-borders">Canvas-Rahmen: AUS</button>
+            <button id="force-render">Force Render</button>
+            <button id="add-test-cube">Test-Würfel hinzufügen</button>
+        </div>
+    </div>
+    
+    <div id="fps-counter">FPS: --</div>
+    
+    <div id="canvas-container">
+        <canvas id="game-canvas"></canvas>
+    </div>
+    
+    <script>
+        // Debug-Variablen
+        let scene, camera, renderer;
+        let isWireframe = false;
+        let frameCount = 0;
+        let lastTime = 0;
+        let testCube = null;
+        let animationId = null;
+        
+        // Debug-Protokollierung
+        function debugOutput(message) {
+            console.log(message);
+            document.getElementById('debug-info').innerHTML += message + '<br>';
+        }
+        
+        // FPS-Berechnung
+        function updateFPS(time) {
+            frameCount++;
+            
+            // Aktualisiere FPS-Zähler einmal pro Sekunde
+            if (time - lastTime >= 1000) {
+                const fps = Math.round((frameCount * 1000) / (time - lastTime));
+                document.getElementById('fps-counter').textContent = `FPS: ${fps}`;
+                frameCount = 0;
+                lastTime = time;
+            }
+        }
+        
+        // Initialisiere Three.js-Szene
+        function init() {
+            debugOutput('Initialisiere Three.js Scene...');
+            
+            // Szene erstellen
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000022); // Dunkelblauer Hintergrund
+            
+            // Orthographische Kamera erstellen
+            debugOutput('Erstelle Kamera...');
+            const aspect = window.innerWidth / window.innerHeight;
+            const frustrumSize = 20;
+            camera = new THREE.OrthographicCamera(
+                frustrumSize * aspect / -2,
+                frustrumSize * aspect / 2,
+                frustrumSize / 2,
+                frustrumSize / -2,
+                0.1,
+                1000
+            );
+            camera.position.set(0, 0, 10);
+            camera.lookAt(0, 0, 0);
+            
+            // Renderer erstellen
+            debugOutput('Erstelle Renderer...');
+            const canvas = document.getElementById('game-canvas');
+            
+            try {
+                renderer = new THREE.WebGLRenderer({ 
+                    canvas: canvas,
+                    antialias: true 
+                });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(window.devicePixelRatio);
+                
+                // Explizit Farbe leeren
+                renderer.setClearColor(0x000022, 1);
+                renderer.clear();
+                
+                debugOutput('Renderer erfolgreich erstellt ✓');
+            } catch (error) {
+                debugOutput('FEHLER beim Erstellen des Renderers: ' + error.message);
+                return;
+            }
+            
+            // Basis-Licht hinzufügen
+            debugOutput('Füge Licht hinzu...');
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 20, 30);
+            scene.add(directionalLight);
+            
+            // Grid-Hilfslinien hinzufügen
+            const gridHelper = new THREE.GridHelper(20, 20, 0xffffff, 0x444444);
+            gridHelper.rotation.x = Math.PI / 2;
+            scene.add(gridHelper);
+            
+            // Test-Objekte hinzufügen
+            debugOutput('Füge Testobjekte hinzu...');
+            
+            // Achsen-Helfer
+            const axesHelper = new THREE.AxesHelper(5);
+            scene.add(axesHelper);
+            
+            // Würfel als Test für Canvas und WebGL
+            addTestCube();
+            
+            // Event-Listener
+            window.addEventListener('resize', handleResize);
+            
+            // UI-Buttons
+            document.getElementById('toggle-wireframe').addEventListener('click', toggleWireframe);
+            document.getElementById('toggle-borders').addEventListener('click', toggleBorders);
+            document.getElementById('force-render').addEventListener('click', forceRender);
+            document.getElementById('add-test-cube').addEventListener('click', addTestCube);
+            
+            // Animation starten
+            debugOutput('Starte Animation...');
+            animate(0);
+        }
+        
+        // Fügt einen Test-Würfel hinzu
+        function addTestCube() {
+            const geometry = new THREE.BoxGeometry(2, 2, 2);
+            const material = new THREE.MeshLambertMaterial({ 
+                color: 0x00ff00,
+                wireframe: isWireframe 
+            });
+            
+            testCube = new THREE.Mesh(geometry, material);
+            testCube.position.set(0, 0, 0);
+            scene.add(testCube);
+            
+            debugOutput('Test-Würfel hinzugefügt ✓');
+            
+            // Force ein einzelnes Render
+            if (renderer) {
+                renderer.render(scene, camera);
+                debugOutput('Force-Render nach Cube-Hinzufügen ✓');
+            }
+        }
+        
+        // Wechselt Wireframe-Modus
+        function toggleWireframe() {
+            isWireframe = !isWireframe;
+            document.getElementById('toggle-wireframe').textContent = `Wireframe: ${isWireframe ? 'AN' : 'AUS'}`;
+            
+            scene.traverse(function(object) {
+                if (object.isMesh) {
+                    object.material.wireframe = isWireframe;
+                }
+            });
+            
+            debugOutput(`Wireframe ${isWireframe ? 'aktiviert' : 'deaktiviert'} ✓`);
+        }
+        
+        // Zeigt Canvas-Grenzen an
+        function toggleBorders() {
+            const canvas = document.getElementById('game-canvas');
+            canvas.classList.toggle('visible-borders');
+            
+            const hasBorders = canvas.classList.contains('visible-borders');
+            document.getElementById('toggle-borders').textContent = `Canvas-Rahmen: ${hasBorders ? 'AN' : 'AUS'}`;
+            
+            debugOutput(`Canvas-Rahmen ${hasBorders ? 'aktiviert' : 'deaktiviert'} ✓`);
+        }
+        
+        // Erzwingt einen Render-Durchlauf
+        function forceRender() {
+            if (renderer) {
+                debugOutput('Force-Render ausgeführt ✓');
+                renderer.render(scene, camera);
+            }
+        }
+        
+        // Verarbeitet Größenänderungen des Fensters
+        function handleResize() {
+            if (!camera || !renderer) return;
+            
+            const aspect = window.innerWidth / window.innerHeight;
+            const frustrumSize = 20;
+            
+            camera.left = frustrumSize * aspect / -2;
+            camera.right = frustrumSize * aspect / 2;
+            camera.top = frustrumSize / 2;
+            camera.bottom = frustrumSize / -2;
+            
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            
+            debugOutput('Größenanpassung durchgeführt ✓');
+        }
+        
+        // Animations-Schleife
+        function animate(time) {
+            animationId = requestAnimationFrame(animate);
+            updateFPS(time);
+            
+            // Würfel rotieren lassen
+            if (testCube) {
+                testCube.rotation.x += 0.01;
+                testCube.rotation.y += 0.01;
+            }
+            
+            // Rendern
+            if (renderer) {
+                renderer.render(scene, camera);
+            }
+        }
+        
+        // Initialisieren sobald DOM geladen ist
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html> 

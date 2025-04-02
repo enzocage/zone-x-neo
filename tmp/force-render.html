@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zone X - Force Render</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        #debug-container {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 300px;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.8);
+            color: #0f0;
+            padding: 10px;
+            overflow-y: auto;
+            font-family: monospace;
+            z-index: 9999;
+            border-left: 2px solid #0f0;
+        }
+        
+        #debug-list {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        #debug-list li {
+            margin-bottom: 3px;
+            border-bottom: 1px dotted #0a0;
+            padding-bottom: 3px;
+        }
+        
+        .debug-success { color: #0f0; }
+        .debug-error { color: #f00; }
+        .debug-warning { color: #ff0; }
+        
+        #debug-toggle {
+            position: fixed;
+            top: 10px;
+            right: 310px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #0f0;
+            border: 1px solid #0f0;
+            padding: 5px;
+            cursor: pointer;
+            z-index: 10000;
+        }
+        
+        #actions {
+            position: fixed;
+            top: 50px;
+            right: 310px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #0f0;
+            border: 1px solid #0f0;
+            padding: 5px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        #actions button {
+            background: #222;
+            color: #0f0;
+            border: 1px solid #0f0;
+            padding: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <!-- Debug-Container -->
+    <div id="debug-container">
+        <h3>Debug-Ausgabe</h3>
+        <ul id="debug-list">
+            <li>Debug-Modus initialisiert...</li>
+        </ul>
+    </div>
+    
+    <!-- Action-Buttons -->
+    <div id="actions">
+        <button id="force-render">Rendering erzwingen</button>
+        <button id="add-test-cube">Test-Würfel hinzufügen</button>
+        <button id="log-game-state">Spielstatus loggen</button>
+        <button id="toggle-animate">Animation: AUS</button>
+    </div>
+
+    <div id="game-container">
+        <div id="ui-container">
+            <div id="lives">Leben: <span id="lives-count">5</span></div>
+            <div id="blocks">Blocks: <span id="blocks-count">15</span></div>
+            <div id="plutonium">Plutonium übrig: <span id="plutonium-count">5</span></div>
+            <div id="score">Punkte: <span id="score-count">0</span></div>
+            <div id="timer" class="hidden">Timer: <span id="timer-count">20</span></div>
+        </div>
+        <!-- Canvas für das Spiel -->
+        <canvas id="game-canvas"></canvas>
+        <div id="start-screen">
+            <h1>Zone X - Force Render</h1>
+            <p>Spezielle Version zum Erzwingen des Renderings</p>
+            <button id="start-button">Spiel starten</button>
+        </div>
+    </div>
+    
+    <!-- Three.js laden -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    
+    <!-- Debug-Funktion -->
+    <script>
+        let animationRunning = false;
+        
+        window.debugLog = function(message, type = 'info') {
+            console.log('[DEBUG] ' + message);
+            
+            const list = document.getElementById('debug-list');
+            if (!list) {
+                console.error('Debug-Liste nicht gefunden!');
+                return;
+            }
+            
+            const item = document.createElement('li');
+            
+            if (type === 'success') {
+                item.className = 'debug-success';
+                message = '✓ ' + message;
+            } else if (type === 'error') {
+                item.className = 'debug-error';
+                message = '✗ ' + message;
+            } else if (type === 'warning') {
+                item.className = 'debug-warning';
+                message = '⚠ ' + message;
+            }
+            
+            item.textContent = message;
+            list.appendChild(item);
+            
+            list.scrollTop = list.scrollHeight;
+        };
+        
+        // GLOBALE KONFIGURATION
+        window.CONFIG = {
+            GRID_WIDTH: 20,
+            GRID_HEIGHT: 20,
+            TILE_SIZE: 1,
+            USE_FALLBACK_LEVEL: true,
+            CAMERA_FOV: 75,
+            CAMERA_NEAR: 0.1,
+            CAMERA_FAR: 1000,
+            CAMERA_POSITION: { x: 0, y: 0, z: 10 },
+            PLAYER_SPEED: 2,
+            PLAYER_INITIAL_LIVES: 5,
+            PLAYER_INITIAL_BLOCKS: 15,
+            ENEMY_SPEED: 1.2,
+            PLUTONIUM_COUNT: 5,
+            BARREL_COUNT: 3,
+            PLUTONIUM_TIMER: 20,
+            COLORS: {
+                PLAYER: 0x00ff00,
+                ENEMY: 0xff0000,
+                WALL: 0x888888,
+                PLUTONIUM: 0xffff00,
+                BARREL: 0x8B4513,
+                BLOCK: 0x00aaff,
+                EXIT: 0xff00ff,
+                START: 0x0000ff,
+                BACKGROUND: 0x000022
+            }
+        };
+        
+        // GLOBALE UTILS
+        window.Utils = {
+            gridToWorld: function(x, y) {
+                return {
+                    x: (x - CONFIG.GRID_WIDTH / 2) * CONFIG.TILE_SIZE,
+                    y: (CONFIG.GRID_HEIGHT / 2 - y) * CONFIG.TILE_SIZE
+                };
+            },
+            isInBounds: function(x, y) {
+                return x >= 0 && x < CONFIG.GRID_WIDTH && y >= 0 && y < CONFIG.GRID_HEIGHT;
+            }
+        };
+        
+        // MINIMALE KLASSEN
+        window.Player = class Player {
+            constructor(game, x, y) {
+                this.game = game;
+                this.gridX = x;
+                this.gridY = y;
+                this.x = x;
+                this.y = y;
+                
+                // Mesh erstellen
+                this.createMesh();
+                
+                debugLog('Player erstellt an Position ' + x + ',' + y, 'success');
+            }
+            
+            createMesh() {
+                const geometry = new THREE.BoxGeometry(0.8, 0.8, 0.5);
+                const material = new THREE.MeshLambertMaterial({ color: CONFIG.COLORS.PLAYER });
+                this.mesh = new THREE.Mesh(geometry, material);
+                
+                const worldPos = Utils.gridToWorld(this.x, this.y);
+                this.mesh.position.set(worldPos.x, worldPos.y, 0.25);
+                
+                this.game.scene.add(this.mesh);
+                debugLog('Player-Mesh erstellt', 'success');
+            }
+            
+            update() {
+                // Rotation als Animation
+                if (this.mesh) {
+                    this.mesh.rotation.z += 0.01;
+                }
+            }
+        };
+        
+        window.Level = class Level {
+            constructor(game) {
+                this.game = game;
+                this.walls = [];
+                
+                debugLog('Level erstellt', 'success');
+            }
+            
+            loadFallbackLevel() {
+                debugLog('Lade Fallback-Level...', 'success');
+                
+                // Wände am Rand erstellen
+                for (let x = 0; x < CONFIG.GRID_WIDTH; x++) {
+                    for (let y = 0; y < CONFIG.GRID_HEIGHT; y++) {
+                        if (x === 0 || y === 0 || x === CONFIG.GRID_WIDTH - 1 || y === CONFIG.GRID_HEIGHT - 1) {
+                            this.walls.push({ x, y });
+                            
+                            // Wall-Mesh erstellen
+                            const geometry = new THREE.BoxGeometry(1, 1, 1);
+                            const material = new THREE.MeshLambertMaterial({ color: CONFIG.COLORS.WALL });
+                            const mesh = new THREE.Mesh(geometry, material);
+                            
+                            const worldPos = Utils.gridToWorld(x, y);
+                            mesh.position.set(worldPos.x, worldPos.y, 0.5);
+                            
+                            this.game.scene.add(mesh);
+                        }
+                    }
+                }
+                
+                // Spieler erstellen
+                this.game.player = new Player(this.game, 2, 2);
+                
+                debugLog('Fallback-Level geladen mit ' + this.walls.length + ' Wänden', 'success');
+                this.game.forcedRender();
+            }
+        };
+        
+        window.UI = class UI {
+            constructor(game) {
+                this.game = game;
+                debugLog('UI erstellt', 'success');
+            }
+        };
+        
+        window.Game = class Game {
+            constructor() {
+                debugLog('Game wird initialisiert...', 'info');
+                
+                this.scene = null;
+                this.camera = null;
+                this.renderer = null;
+                this.level = null;
+                this.player = null;
+                this.deltaTime = 0;
+                this.lastTime = 0;
+                this.animationId = null;
+                
+                this.init();
+            }
+            
+            init() {
+                debugLog('Initialisiere Scene...', 'info');
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(CONFIG.COLORS.BACKGROUND);
+                
+                debugLog('Initialisiere Kamera...', 'info');
+                const aspect = window.innerWidth / window.innerHeight;
+                const frustrumSize = 20;
+                this.camera = new THREE.OrthographicCamera(
+                    frustrumSize * aspect / -2,
+                    frustrumSize * aspect / 2,
+                    frustrumSize / 2,
+                    frustrumSize / -2,
+                    0.1,
+                    1000
+                );
+                this.camera.position.set(0, 0, 10);
+                this.camera.lookAt(0, 0, 0);
+                
+                debugLog('Initialisiere Renderer...', 'info');
+                const canvas = document.getElementById('game-canvas');
+                
+                try {
+                    this.renderer = new THREE.WebGLRenderer({ 
+                        canvas: canvas,
+                        antialias: true 
+                    });
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                    this.renderer.setPixelRatio(window.devicePixelRatio);
+                    
+                    debugLog('Renderer erfolgreich erstellt', 'success');
+                } catch (error) {
+                    debugLog('Fehler beim Erstellen des Renderers: ' + error.message, 'error');
+                    return;
+                }
+                
+                // Lichter hinzufügen
+                debugLog('Füge Lichter hinzu...', 'info');
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                this.scene.add(ambientLight);
+                
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(10, 20, 30);
+                this.scene.add(directionalLight);
+                
+                // UI initialisieren
+                debugLog('Initialisiere UI...', 'info');
+                this.ui = new UI(this);
+                
+                // Level-Manager initialisieren
+                debugLog('Initialisiere Level...', 'info');
+                this.level = new Level(this);
+                
+                // Event-Listener für Fenstergröße
+                window.addEventListener('resize', this.handleResize.bind(this));
+                
+                // Level laden
+                this.level.loadFallbackLevel();
+                
+                // Animation starten
+                this.animate(0);
+                animationRunning = true;
+                
+                debugLog('Game erfolgreich initialisiert', 'success');
+            }
+            
+            handleResize() {
+                if (!this.camera || !this.renderer) return;
+                
+                const aspect = window.innerWidth / window.innerHeight;
+                const frustrumSize = 20;
+                
+                this.camera.left = frustrumSize * aspect / -2;
+                this.camera.right = frustrumSize * aspect / 2;
+                this.camera.top = frustrumSize / 2;
+                this.camera.bottom = frustrumSize / -2;
+                
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                
+                this.forcedRender();
+            }
+            
+            update(time) {
+                const currentTime = time !== undefined ? time : 0;
+                this.deltaTime = (currentTime - this.lastTime) / 1000;
+                this.lastTime = currentTime;
+                
+                // Player updaten
+                if (this.player) {
+                    this.player.update();
+                }
+            }
+            
+            render() {
+                if (!this.scene || !this.camera || !this.renderer) {
+                    debugLog('Rendering nicht möglich: Scene, Camera oder Renderer fehlt', 'error');
+                    return;
+                }
+                
+                this.renderer.render(this.scene, this.camera);
+            }
+            
+            forcedRender() {
+                debugLog('Forced Render ausgeführt', 'info');
+                this.render();
+            }
+            
+            animate(time) {
+                if (animationRunning) {
+                    this.animationId = requestAnimationFrame(this.animate.bind(this));
+                }
+                
+                this.update(time);
+                this.render();
+            }
+            
+            toggleAnimation() {
+                if (animationRunning) {
+                    if (this.animationId) {
+                        cancelAnimationFrame(this.animationId);
+                        this.animationId = null;
+                    }
+                    animationRunning = false;
+                    debugLog('Animation gestoppt', 'warning');
+                } else {
+                    animationRunning = true;
+                    this.animate(0);
+                    debugLog('Animation gestartet', 'success');
+                }
+                return animationRunning;
+            }
+            
+            addTestCube() {
+                const geometry = new THREE.BoxGeometry(2, 2, 2);
+                const material = new THREE.MeshLambertMaterial({ color: 0xff00ff });
+                const cube = new THREE.Mesh(geometry, material);
+                
+                // Zufällige Position
+                const x = Math.floor(Math.random() * (CONFIG.GRID_WIDTH - 4)) + 2;
+                const y = Math.floor(Math.random() * (CONFIG.GRID_HEIGHT - 4)) + 2;
+                
+                const worldPos = Utils.gridToWorld(x, y);
+                cube.position.set(worldPos.x, worldPos.y, 1);
+                
+                this.scene.add(cube);
+                
+                debugLog('Test-Würfel hinzugefügt an Position ' + x + ',' + y, 'success');
+                this.forcedRender();
+            }
+            
+            logGameState() {
+                debugLog('------- GAME STATE -------', 'info');
+                debugLog('Scene existiert: ' + (this.scene !== null ? '✓' : '✗'), this.scene !== null ? 'success' : 'error');
+                debugLog('Camera existiert: ' + (this.camera !== null ? '✓' : '✗'), this.camera !== null ? 'success' : 'error');
+                debugLog('Renderer existiert: ' + (this.renderer !== null ? '✓' : '✗'), this.renderer !== null ? 'success' : 'error');
+                debugLog('Level existiert: ' + (this.level !== null ? '✓' : '✗'), this.level !== null ? 'success' : 'error');
+                debugLog('Player existiert: ' + (this.player !== null ? '✓' : '✗'), this.player !== null ? 'success' : 'error');
+                
+                if (this.scene) {
+                    let objectCount = 0;
+                    let meshCount = 0;
+                    let lightCount = 0;
+                    
+                    this.scene.traverse(obj => {
+                        objectCount++;
+                        if (obj.isMesh) meshCount++;
+                        if (obj.isLight) lightCount++;
+                    });
+                    
+                    debugLog('Objekte in der Szene: ' + objectCount, 'info');
+                    debugLog('Meshes in der Szene: ' + meshCount, 'info');
+                    debugLog('Lichter in der Szene: ' + lightCount, 'info');
+                }
+                
+                if (this.camera) {
+                    debugLog('Kamera-Position: ' + JSON.stringify({
+                        x: this.camera.position.x.toFixed(2),
+                        y: this.camera.position.y.toFixed(2),
+                        z: this.camera.position.z.toFixed(2)
+                    }), 'info');
+                }
+                
+                debugLog('Animation läuft: ' + (animationRunning ? '✓' : '✗'), animationRunning ? 'success' : 'warning');
+                debugLog('----------------------', 'info');
+            }
+        };
+        
+        // Hauptskript
+        document.addEventListener('DOMContentLoaded', function() {
+            debugLog('DOM geladen', 'success');
+            
+            // Start-Button
+            document.getElementById('start-button').addEventListener('click', function() {
+                document.getElementById('start-screen').style.display = 'none';
+                
+                try {
+                    window.game = new Game();
+                } catch (e) {
+                    debugLog('Fehler beim Initialisieren des Spiels: ' + e.message, 'error');
+                    console.error(e);
+                }
+            });
+            
+            // Action-Buttons
+            document.getElementById('force-render').addEventListener('click', function() {
+                if (window.game) {
+                    window.game.forcedRender();
+                } else {
+                    debugLog('Spiel nicht initialisiert', 'error');
+                }
+            });
+            
+            document.getElementById('add-test-cube').addEventListener('click', function() {
+                if (window.game) {
+                    window.game.addTestCube();
+                } else {
+                    debugLog('Spiel nicht initialisiert', 'error');
+                }
+            });
+            
+            document.getElementById('log-game-state').addEventListener('click', function() {
+                if (window.game) {
+                    window.game.logGameState();
+                } else {
+                    debugLog('Spiel nicht initialisiert', 'error');
+                }
+            });
+            
+            document.getElementById('toggle-animate').addEventListener('click', function() {
+                if (window.game) {
+                    const isRunning = window.game.toggleAnimation();
+                    this.textContent = 'Animation: ' + (isRunning ? 'AN' : 'AUS');
+                } else {
+                    debugLog('Spiel nicht initialisiert', 'error');
+                }
+            });
+        });
+    </script>
+</body>
+</html> 

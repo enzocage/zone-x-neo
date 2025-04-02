@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zone X - Übergangsversion</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100vh;
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+        }
+        #debug {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            max-height: 200px;
+            overflow-y: auto;
+            max-width: 600px;
+            font-family: monospace;
+            z-index: 100;
+        }
+        button {
+            margin-top: 10px;
+            padding: 5px 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+</head>
+<body>
+    <div id="ui">
+        <div>Bewegen: W,A,S,D</div>
+        <div>Leben: <span id="lives">5</span></div>
+        <button id="test-button">Teste 3D-Objekte</button>
+    </div>
+    <div id="debug"></div>
+    <canvas id="game-canvas"></canvas>
+
+    <script>
+        // Debug-Logging-Funktion
+        function log(message) {
+            console.log(message);
+            const debug = document.getElementById('debug');
+            debug.innerHTML += message + '<br>';
+            
+            // Scroll nach unten
+            debug.scrollTop = debug.scrollHeight;
+        }
+        
+        log('Starting Zone X Bridge Version...');
+        
+        // Minimal CONFIG
+        const CONFIG = {
+            GRID_WIDTH: 20,
+            GRID_HEIGHT: 20,
+            TILE_SIZE: 1,
+            COLORS: {
+                PLAYER: 0x00ff00,
+                ENEMY: 0xff0000,
+                WALL: 0x888888,
+                PLUTONIUM: 0xffff00,
+                BARREL: 0x8B4513,
+                BLOCK: 0x00aaff,
+                EXIT: 0xff00ff,
+                BACKGROUND: 0x000000
+            },
+            CAMERA_POSITION: { x: 0, y: 0, z: 10 }
+        };
+        
+        // Minimal Utils
+        const Utils = {
+            gridToWorld: function(x, y) {
+                return {
+                    x: (x - CONFIG.GRID_WIDTH / 2),
+                    y: (CONFIG.GRID_HEIGHT / 2 - y)
+                };
+            }
+        };
+        
+        // Spielvariablen
+        let scene, camera, renderer;
+        let player;
+        let grid = [];
+        let lives = 5;
+        let objects = [];
+        
+        // Initialisiere Three.js
+        function init() {
+            try {
+                log('Erstelle Scene...');
+                scene = new THREE.Scene();
+                scene.background = new THREE.Color(CONFIG.COLORS.BACKGROUND);
+                
+                log('Erstelle Kamera...');
+                const aspect = window.innerWidth / window.innerHeight;
+                const frustrumSize = 25;
+                camera = new THREE.OrthographicCamera(
+                    frustrumSize * aspect / -2,
+                    frustrumSize * aspect / 2,
+                    frustrumSize / 2,
+                    frustrumSize / -2,
+                    1, 1000
+                );
+                camera.position.set(0, 0, 20);
+                camera.lookAt(0, 0, 0);
+                
+                log('Erstelle Renderer...');
+                const canvas = document.getElementById('game-canvas');
+                renderer = new THREE.WebGLRenderer({ 
+                    canvas: canvas,
+                    antialias: true 
+                });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                
+                log('Füge Licht hinzu...');
+                const light = new THREE.AmbientLight(0xffffff, 1);
+                scene.add(light);
+                
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(10, 20, 30);
+                scene.add(directionalLight);
+                
+                log('Erstelle Level...');
+                createSimpleLevel();
+                
+                log('Registriere Event-Listener...');
+                window.addEventListener('resize', handleResize);
+                
+                // Test-Button
+                document.getElementById('test-button').addEventListener('click', testObjects);
+                
+                log('Starte Animation...');
+                animate();
+                
+                log('Initialisierung abgeschlossen!');
+            } catch (error) {
+                log('FEHLER bei Initialisierung: ' + error.message);
+                console.error(error);
+            }
+        }
+        
+        // Erstelle ein einfaches Level
+        function createSimpleLevel() {
+            try {
+                log('Erstelle Wände...');
+                // Erstelle Wände am Rand
+                const wallGeometry = new THREE.BoxGeometry(1, 1, 1);
+                const wallMaterial = new THREE.MeshLambertMaterial({ color: CONFIG.COLORS.WALL });
+                
+                for (let x = 0; x < CONFIG.GRID_WIDTH; x++) {
+                    for (let y = 0; y < CONFIG.GRID_HEIGHT; y++) {
+                        if (x === 0 || y === 0 || x === CONFIG.GRID_WIDTH - 1 || y === CONFIG.GRID_HEIGHT - 1) {
+                            const wall = new THREE.Mesh(wallGeometry, wallMaterial);
+                            wall.position.set(x - CONFIG.GRID_WIDTH/2, y - CONFIG.GRID_HEIGHT/2, 0.5);
+                            scene.add(wall);
+                            objects.push(wall);
+                            
+                            // Markiere die Position als Wand
+                            if (!grid[y]) grid[y] = [];
+                            grid[y][x] = 'wall';
+                        }
+                    }
+                }
+                
+                log('Erstelle Spieler...');
+                // Erstelle Spieler
+                const playerGeometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+                const playerMaterial = new THREE.MeshLambertMaterial({ color: CONFIG.COLORS.PLAYER });
+                player = new THREE.Mesh(playerGeometry, playerMaterial);
+                player.position.set(-CONFIG.GRID_WIDTH/2 + 2, -CONFIG.GRID_HEIGHT/2 + 2, 0.5);
+                scene.add(player);
+                objects.push(player);
+                
+                log('Level erstellt.');
+            } catch (error) {
+                log('FEHLER beim Erstellen des Levels: ' + error.message);
+                console.error(error);
+            }
+        }
+        
+        // Test-Objekte aus der komplexen Version
+        function testObjects() {
+            try {
+                log('Teste 3D-Objekte aus dem Hauptspiel...');
+                
+                // Entferne alte Objekte
+                objects.forEach(obj => scene.remove(obj));
+                objects = [];
+                
+                log('Erstelle Plutonium...');
+                // Plutonium
+                const plutoniumGeometry = new THREE.SphereGeometry(0.3, 16, 16);
+                const plutoniumMaterial = new THREE.MeshLambertMaterial({ color: CONFIG.COLORS.PLUTONIUM });
+                const plutonium = new THREE.Mesh(plutoniumGeometry, plutoniumMaterial);
+                plutonium.position.set(2, 2, 0.3);
+                scene.add(plutonium);
+                objects.push(plutonium);
+                
+                log('Erstelle Tonne...');
+                // Tonne
+                const barrelGeometry = new THREE.CylinderGeometry(0.4, 0.4, 0.8, 16);
+                const barrelMaterial = new THREE.MeshLambertMaterial({ color: CONFIG.COLORS.BARREL });
+                const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
+                barrel.position.set(-2, 2, 0.4);
+                scene.add(barrel);
+                objects.push(barrel);
+                
+                log('Erstelle Block...');
+                // Block
+                const blockGeometry = new THREE.BoxGeometry(0.8, 0.8, 0.4);
+                const blockMaterial = new THREE.MeshLambertMaterial({ color: CONFIG.COLORS.BLOCK });
+                const block = new THREE.Mesh(blockGeometry, blockMaterial);
+                block.position.set(2, -2, 0.2);
+                scene.add(block);
+                objects.push(block);
+                
+                log('Erstelle Exit...');
+                // Exit
+                const exitGeometry = new THREE.BoxGeometry(0.9, 0.9, 0.1);
+                const exitMaterial = new THREE.MeshLambertMaterial({ 
+                    color: CONFIG.COLORS.EXIT,
+                    transparent: true,
+                    opacity: 0.7
+                });
+                const exit = new THREE.Mesh(exitGeometry, exitMaterial);
+                exit.position.set(-2, -2, 0.05);
+                scene.add(exit);
+                objects.push(exit);
+                
+                log('Alle Testobjekte erfolgreich erstellt!');
+            } catch (error) {
+                log('FEHLER beim Testen der Objekte: ' + error.message);
+                console.error(error);
+            }
+        }
+        
+        // Handler für Fenstergrößenänderungen
+        function handleResize() {
+            try {
+                const aspect = window.innerWidth / window.innerHeight;
+                const frustrumSize = 25;
+                
+                camera.left = frustrumSize * aspect / -2;
+                camera.right = frustrumSize * aspect / 2;
+                camera.top = frustrumSize / 2;
+                camera.bottom = frustrumSize / -2;
+                
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            } catch (error) {
+                log('FEHLER bei Größenänderung: ' + error.message);
+            }
+        }
+        
+        // Render-Funktion
+        function render() {
+            try {
+                renderer.render(scene, camera);
+            } catch (error) {
+                log('FEHLER beim Rendern: ' + error.message);
+            }
+        }
+        
+        // Animations-Schleife
+        function animate() {
+            try {
+                requestAnimationFrame(animate);
+                
+                // Lasse den Spieler rotieren, um zu zeigen dass die Animation läuft
+                if (player) {
+                    player.rotation.z += 0.01;
+                }
+                
+                render();
+            } catch (error) {
+                log('FEHLER in der Animations-Schleife: ' + error.message);
+            }
+        }
+        
+        // Starte das Spiel, wenn alles geladen ist
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html> 

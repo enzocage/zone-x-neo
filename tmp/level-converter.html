@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zone X - Level-Konverter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #4a4a4a;
+        }
+        textarea {
+            width: 100%;
+            min-height: 200px;
+            margin: 10px 0;
+            font-family: monospace;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .result {
+            margin-top: 20px;
+            border-top: 1px solid #ddd;
+            padding-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Zone X - Level-Konverter</h1>
+        <p>CSV-Level in ein Format konvertieren, das direkt in den Quellcode eingefügt werden kann.</p>
+        
+        <h2>CSV-Level einfügen:</h2>
+        <textarea id="csvInput" placeholder="CSV-Level hier einfügen..."></textarea>
+        
+        <button id="convertButton">Konvertieren</button>
+        
+        <div class="result">
+            <h2>JavaScript-Code:</h2>
+            <textarea id="jsOutput" readonly></textarea>
+            
+            <h2>Vorschau:</h2>
+            <pre id="preview" style="background-color: #f5f5f5; padding: 10px; overflow: auto;"></pre>
+        </div>
+    </div>
+    
+    <script>
+        document.getElementById('convertButton').addEventListener('click', function() {
+            const csvText = document.getElementById('csvInput').value;
+            if (!csvText.trim()) {
+                alert("Bitte fügen Sie CSV-Level-Daten ein!");
+                return;
+            }
+            
+            try {
+                // CSV in Zeilen aufteilen
+                const rows = csvText.split('\n');
+                const lines = [];
+                
+                // Jede Zeile in ein Array-Element umwandeln
+                for (let row of rows) {
+                    if (row.trim() === '') continue;
+                    
+                    // Ersetze leere Zellen durch Leerzeichen
+                    const cells = row.split(',');
+                    const line = cells.join('');
+                    lines.push(line);
+                }
+                
+                // JavaScript-Array-Format erzeugen
+                let jsCode = "FALLBACK_LEVEL: [\n";
+                for (const line of lines) {
+                    jsCode += `    "${line}",\n`;
+                }
+                jsCode += "],";
+                
+                // Ausgabe
+                document.getElementById('jsOutput').value = jsCode;
+                document.getElementById('preview').textContent = lines.join('\n');
+                
+            } catch (error) {
+                alert("Fehler bei der Konvertierung: " + error.message);
+                console.error(error);
+            }
+        });
+    </script>
+</body>
+</html> 

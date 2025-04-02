@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zone X - Einfache Version</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100vh;
+        }
+        .ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+</head>
+<body>
+    <div class="ui">
+        <div>Bewegen: W,A,S,D</div>
+        <div>Leben: <span id="lives">5</span></div>
+    </div>
+    <canvas id="game"></canvas>
+
+    <script>
+        // Einfaches Zone X Spiel
+        // Diese Version ist stark vereinfacht und dient nur als Fallback
+        // falls die Hauptversion Probleme hat
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Starte einfache Version von Zone X');
+            
+            // Grundlegende Konfiguration
+            const CONFIG = {
+                GRID_SIZE: 20,
+                WALL_COLOR: 0x888888,
+                PLAYER_COLOR: 0x00ff00,
+                ENEMY_COLOR: 0xff0000,
+                BACKGROUND_COLOR: 0x000000,
+                PLAYER_SPEED: 3,
+                ENEMY_SPEED: 2
+            };
+            
+            // Spielvariablen
+            let scene, camera, renderer;
+            let player, grid = [];
+            let enemies = [];
+            let lives = 5;
+            
+            // Input-Status
+            const keys = {
+                up: false,
+                down: false,
+                left: false,
+                right: false
+            };
+            
+            // Initialisiere Three.js
+            function init() {
+                // Scene erstellen
+                scene = new THREE.Scene();
+                scene.background = new THREE.Color(CONFIG.BACKGROUND_COLOR);
+                
+                // Kamera erstellen
+                const aspect = window.innerWidth / window.innerHeight;
+                const frustrumSize = 25;
+                camera = new THREE.OrthographicCamera(
+                    frustrumSize * aspect / -2,
+                    frustrumSize * aspect / 2,
+                    frustrumSize / 2,
+                    frustrumSize / -2,
+                    1, 1000
+                );
+                camera.position.set(0, 0, 20);
+                camera.lookAt(0, 0, 0);
+                
+                // Renderer erstellen
+                const canvas = document.getElementById('game');
+                renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                
+                // Licht hinzufügen
+                const light = new THREE.AmbientLight(0xffffff, 1);
+                scene.add(light);
+                
+                // Erstelle das Level
+                createLevel();
+                
+                // Event Listener
+                window.addEventListener('keydown', handleKeyDown);
+                window.addEventListener('keyup', handleKeyUp);
+                window.addEventListener('resize', handleResize);
+                
+                // Start der Animation
+                animate();
+            }
+            
+            // Erstelle ein einfaches Level
+            function createLevel() {
+                // Erstelle Wände am Rand
+                const wallGeometry = new THREE.BoxGeometry(1, 1, 1);
+                const wallMaterial = new THREE.MeshLambertMaterial({ color: CONFIG.WALL_COLOR });
+                
+                for (let x = 0; x < CONFIG.GRID_SIZE; x++) {
+                    for (let y = 0; y < CONFIG.GRID_SIZE; y++) {
+                        if (x === 0 || y === 0 || x === CONFIG.GRID_SIZE - 1 || y === CONFIG.GRID_SIZE - 1) {
+                            const wall = new THREE.Mesh(wallGeometry, wallMaterial);
+                            wall.position.set(x - CONFIG.GRID_SIZE/2, y - CONFIG.GRID_SIZE/2, 0.5);
+                            scene.add(wall);
+                            
+                            // Markiere die Position als Wand
+                            if (!grid[y]) grid[y] = [];
+                            grid[y][x] = 'wall';
+                        }
+                    }
+                }
+                
+                // Erstelle Spieler
+                const playerGeometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+                const playerMaterial = new THREE.MeshLambertMaterial({ color: CONFIG.PLAYER_COLOR });
+                player = new THREE.Mesh(playerGeometry, playerMaterial);
+                player.position.set(-CONFIG.GRID_SIZE/2 + 2, -CONFIG.GRID_SIZE/2 + 2, 0.5);
+                player.userData = {
+                    gridX: 2,
+                    gridY: 2
+                };
+                scene.add(player);
+                
+                // Erstelle einige Gegner
+                const enemyGeometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+                const enemyMaterial = new THREE.MeshLambertMaterial({ color: CONFIG.ENEMY_COLOR });
+                
+                for (let i = 0; i < 5; i++) {
+                    const enemy = new THREE.Mesh(enemyGeometry, enemyMaterial);
+                    // Platziere Gegner zufällig
+                    const x = Math.floor(Math.random() * (CONFIG.GRID_SIZE - 4)) + 2;
+                    const y = Math.floor(Math.random() * (CONFIG.GRID_SIZE - 4)) + 2;
+                    
+                    enemy.position.set(x - CONFIG.GRID_SIZE/2, y - CONFIG.GRID_SIZE/2, 0.5);
+                    enemy.userData = {
+                        gridX: x,
+                        gridY: y,
+                        direction: { 
+                            x: Math.random() > 0.5 ? 1 : -1, 
+                            y: Math.random() > 0.5 ? 1 : -1
+                        },
+                        speed: CONFIG.ENEMY_SPEED * (0.5 + Math.random())
+                    };
+                    
+                    scene.add(enemy);
+                    enemies.push(enemy);
+                }
+            }
+            
+            // Event-Handler für Tastendruck
+            function handleKeyDown(e) {
+                switch(e.key.toLowerCase()) {
+                    case 'w': keys.up = true; break;
+                    case 's': keys.down = true; break;
+                    case 'a': keys.left = true; break;
+                    case 'd': keys.right = true; break;
+                }
+            }
+            
+            // Event-Handler für Tastenfreigabe
+            function handleKeyUp(e) {
+                switch(e.key.toLowerCase()) {
+                    case 'w': keys.up = false; break;
+                    case 's': keys.down = false; break;
+                    case 'a': keys.left = false; break;
+                    case 'd': keys.right = false; break;
+                }
+            }
+            
+            // Event-Handler für Fenstergröße
+            function handleResize() {
+                const aspect = window.innerWidth / window.innerHeight;
+                const frustrumSize = 25;
+                
+                camera.left = frustrumSize * aspect / -2;
+                camera.right = frustrumSize * aspect / 2;
+                camera.top = frustrumSize / 2;
+                camera.bottom = frustrumSize / -2;
+                
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+            
+            // Update-Funktion
+            function update() {
+                // Bewegung des Spielers
+                let dx = 0, dy = 0;
+                if (keys.up) dy = CONFIG.PLAYER_SPEED * 0.05;
+                if (keys.down) dy = -CONFIG.PLAYER_SPEED * 0.05;
+                if (keys.left) dx = -CONFIG.PLAYER_SPEED * 0.05;
+                if (keys.right) dx = CONFIG.PLAYER_SPEED * 0.05;
+                
+                // Neue Position berechnen
+                const newX = player.position.x + dx;
+                const newY = player.position.y + dy;
+                
+                // Grid-Position berechnen
+                const gridX = Math.round(newX + CONFIG.GRID_SIZE/2);
+                const gridY = Math.round(newY + CONFIG.GRID_SIZE/2);
+                
+                // Nur bewegen, wenn kein Hindernis
+                if (!grid[gridY] || !grid[gridY][gridX] || grid[gridY][gridX] !== 'wall') {
+                    player.position.x = newX;
+                    player.position.y = newY;
+                    player.userData.gridX = gridX;
+                    player.userData.gridY = gridY;
+                }
+                
+                // Kamera folgt dem Spieler
+                camera.position.x = player.position.x;
+                camera.position.y = player.position.y;
+                
+                // Gegner bewegen
+                for (const enemy of enemies) {
+                    const userData = enemy.userData;
+                    
+                    // Neue Position berechnen
+                    const newX = enemy.position.x + userData.direction.x * userData.speed * 0.02;
+                    const newY = enemy.position.y + userData.direction.y * userData.speed * 0.02;
+                    
+                    // Grid-Position berechnen
+                    const gridX = Math.round(newX + CONFIG.GRID_SIZE/2);
+                    const gridY = Math.round(newY + CONFIG.GRID_SIZE/2);
+                    
+                    // Prüfen auf Kollision mit Wänden
+                    if (grid[gridY] && grid[gridY][gridX] === 'wall') {
+                        // Richtung ändern
+                        if (Math.abs(userData.direction.x) > 0.1) userData.direction.x *= -1;
+                        if (Math.abs(userData.direction.y) > 0.1) userData.direction.y *= -1;
+                    } else {
+                        // Bewegen
+                        enemy.position.x = newX;
+                        enemy.position.y = newY;
+                        userData.gridX = gridX;
+                        userData.gridY = gridY;
+                    }
+                    
+                    // Kollision mit Spieler prüfen
+                    const dx = Math.abs(player.position.x - enemy.position.x);
+                    const dy = Math.abs(player.position.y - enemy.position.y);
+                    if (dx < 0.8 && dy < 0.8) {
+                        // Kollision! Leben verlieren
+                        lives--;
+                        document.getElementById('lives').textContent = lives;
+                        
+                        if (lives <= 0) {
+                            alert("Game Over! Seite neu laden, um noch einmal zu spielen.");
+                            // Spiel pausieren
+                            keys.up = keys.down = keys.left = keys.right = false;
+                        } else {
+                            // Spieler zurücksetzen
+                            player.position.set(-CONFIG.GRID_SIZE/2 + 2, -CONFIG.GRID_SIZE/2 + 2, 0.5);
+                            player.userData.gridX = 2;
+                            player.userData.gridY = 2;
+                        }
+                    }
+                }
+            }
+            
+            // Render-Funktion
+            function render() {
+                renderer.render(scene, camera);
+            }
+            
+            // Animations-Schleife
+            function animate() {
+                requestAnimationFrame(animate);
+                update();
+                render();
+            }
+            
+            // Starte das Spiel
+            init();
+        });
+    </script>
+</body>
+</html> 

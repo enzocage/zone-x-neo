@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGL-Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+        }
+        #results {
+            margin-top: 20px;
+            background-color: #fff;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .pass {
+            color: green;
+            font-weight: bold;
+        }
+        .fail {
+            color: red;
+            font-weight: bold;
+        }
+        .warning {
+            color: orange;
+            font-weight: bold;
+        }
+        #test-container {
+            margin-top: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .test-canvas {
+            width: 300px;
+            height: 300px;
+            background-color: #ddd;
+            border: 1px solid #999;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebGL-Kompatibilitätstest</h1>
+    
+    <div id="results">
+        <p>Teste WebGL-Unterstützung...</p>
+    </div>
+    
+    <div id="test-container">
+        <div>
+            <h3>Test 1: Nativer WebGL-Kontext</h3>
+            <canvas id="test-canvas-1" class="test-canvas"></canvas>
+            <div id="test1-result"></div>
+        </div>
+        
+        <div>
+            <h3>Test 2: Three.js Renderer</h3>
+            <div id="test-canvas-2-container"></div>
+            <div id="test2-result"></div>
+        </div>
+        
+        <div>
+            <h3>Test 3: Minimaler Three.js Würfel</h3>
+            <div id="test-canvas-3-container"></div>
+            <div id="test3-result"></div>
+        </div>
+    </div>
+    
+    <!-- Three.js laden -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    
+    <script>
+        const resultsDiv = document.getElementById('results');
+        
+        // Globale Testergebnisse
+        let webglSupported = false;
+        let webgl2Supported = false;
+        let threejsWorks = false;
+        let rendererWorks = false;
+        
+        // Führe Tests nacheinander aus
+        function runTests() {
+            console.log("Starte WebGL-Tests...");
+            
+            testWebGLSupport()
+                .then(() => testThreeJsRenderer())
+                .then(() => testThreeJsCube())
+                .then(() => {
+                    showFinalResults();
+                })
+                .catch(error => {
+                    console.error("Fehler bei Tests:", error);
+                    resultsDiv.innerHTML += `<p class="fail">FEHLER: ${error.message}</p>`;
+                });
+        }
+        
+        // Test 1: Grundlegende WebGL-Unterstützung
+        function testWebGLSupport() {
+            return new Promise((resolve) => {
+                console.log("Test 1: Prüfe WebGL-Unterstützung");
+                
+                const canvas = document.getElementById('test-canvas-1');
+                const testResult = document.getElementById('test1-result');
+                
+                try {
+                    // WebGL 1 testen
+                    const gl1 = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                    
+                    if (gl1) {
+                        webglSupported = true;
+                        
+                        // Einfaches Rechteck zeichnen
+                        gl1.clearColor(0.0, 0.5, 0.0, 1.0);
+                        gl1.clear(gl1.COLOR_BUFFER_BIT);
+                        
+                        testResult.innerHTML = '<p class="pass">WebGL 1 wird unterstützt ✓</p>';
+                        
+                        // WebGL-Info ausgeben
+                        const debugInfo = gl1.getExtension('WEBGL_debug_renderer_info');
+                        if (debugInfo) {
+                            const vendor = gl1.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+                            const renderer = gl1.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                            
+                            testResult.innerHTML += `<p>GPU: ${renderer}</p>`;
+                            testResult.innerHTML += `<p>Vendor: ${vendor}</p>`;
+                        }
+                        
+                        // WebGL 2 testen
+                        const gl2 = canvas.getContext('webgl2');
+                        if (gl2) {
+                            webgl2Supported = true;
+                            gl2.clearColor(0.0, 0.0, 0.5, 1.0);
+                            gl2.clear(gl2.COLOR_BUFFER_BIT);
+                            
+                            testResult.innerHTML += '<p class="pass">WebGL 2 wird unterstützt ✓</p>';
+                        } else {
+                            testResult.innerHTML += '<p class="warning">WebGL 2 wird nicht unterstützt ⚠</p>';
+                        }
+                    } else {
+                        testResult.innerHTML = '<p class="fail">WebGL wird nicht unterstützt ✗</p>';
+                        resultsDiv.innerHTML += '<p class="fail">WebGL wird von Ihrem Browser nicht unterstützt. Bitte aktualisieren Sie Ihren Browser oder aktivieren Sie die Hardware-Beschleunigung.</p>';
+                    }
+                } catch (e) {
+                    testResult.innerHTML = `<p class="fail">Fehler beim WebGL-Test: ${e.message} ✗</p>`;
+                    resultsDiv.innerHTML += `<p class="fail">Fehler beim Initialisieren von WebGL: ${e.message}</p>`;
+                }
+                
+                resolve();
+            });
+        }
+        
+        // Test 2: Three.js Renderer
+        function testThreeJsRenderer() {
+            return new Promise((resolve) => {
+                console.log("Test 2: Prüfe Three.js Renderer");
+                
+                const container = document.getElementById('test-canvas-2-container');
+                const testResult = document.getElementById('test2-result');
+                
+                try {
+                    // Three.js-Szene erstellen
+                    const scene = new THREE.Scene();
+                    scene.background = new THREE.Color(0x6495ED); // Kornblumenblau
+                    
+                    // Kamera erstellen
+                    const camera = new THREE.PerspectiveCamera(75, 300/300, 0.1, 1000);
+                    camera.position.z = 5;
+                    
+                    // Renderer erstellen
+                    const renderer = new THREE.WebGLRenderer();
+                    renderer.setSize(300, 300);
+                    container.appendChild(renderer.domElement);
+                    
+                    // Einmal rendern
+                    renderer.render(scene, camera);
+                    
+                    testResult.innerHTML = '<p class="pass">Three.js Renderer erstellt ✓</p>';
+                    threejsWorks = true;
+                    
+                    // Renderer-Info
+                    const info = renderer.info;
+                    testResult.innerHTML += `<p>Render-Info: ${JSON.stringify(info.render)}</p>`;
+                    
+                } catch (e) {
+                    testResult.innerHTML = `<p class="fail">Fehler beim Three.js Renderer-Test: ${e.message} ✗</p>`;
+                    resultsDiv.innerHTML += `<p class="fail">Fehler beim Erstellen des Three.js Renderers: ${e.message}</p>`;
+                }
+                
+                resolve();
+            });
+        }
+        
+        // Test 3: Three.js Würfel
+        function testThreeJsCube() {
+            return new Promise((resolve) => {
+                console.log("Test 3: Rendere Three.js Würfel");
+                
+                const container = document.getElementById('test-canvas-3-container');
+                const testResult = document.getElementById('test3-result');
+                
+                try {
+                    // Three.js-Szene erstellen
+                    const scene = new THREE.Scene();
+                    scene.background = new THREE.Color(0x222222);
+                    
+                    // Kamera erstellen
+                    const camera = new THREE.PerspectiveCamera(75, 300/300, 0.1, 1000);
+                    camera.position.z = 5;
+                    
+                    // Renderer erstellen
+                    const renderer = new THREE.WebGLRenderer({ antialias: true });
+                    renderer.setSize(300, 300);
+                    container.appendChild(renderer.domElement);
+                    
+                    // Licht hinzufügen
+                    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+                    scene.add(ambientLight);
+                    
+                    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                    directionalLight.position.set(1, 1, 1).normalize();
+                    scene.add(directionalLight);
+                    
+                    // Würfel erstellen
+                    const geometry = new THREE.BoxGeometry(2, 2, 2);
+                    const material = new THREE.MeshLambertMaterial({ color: 0x00ff00 });
+                    const cube = new THREE.Mesh(geometry, material);
+                    cube.rotation.x = Math.PI / 4;
+                    cube.rotation.y = Math.PI / 4;
+                    scene.add(cube);
+                    
+                    // Rendern
+                    renderer.render(scene, camera);
+                    
+                    // Erfolg!
+                    testResult.innerHTML = '<p class="pass">Three.js Würfel gerendert ✓</p>';
+                    rendererWorks = true;
+                    
+                    // Animation starten
+                    function animate() {
+                        requestAnimationFrame(animate);
+                        
+                        if (cube) {
+                            cube.rotation.x += 0.01;
+                            cube.rotation.y += 0.01;
+                        }
+                        
+                        renderer.render(scene, camera);
+                    }
+                    
+                    animate();
+                    
+                } catch (e) {
+                    testResult.innerHTML = `<p class="fail">Fehler beim Three.js Würfel-Test: ${e.message} ✗</p>`;
+                    resultsDiv.innerHTML += `<p class="fail">Fehler beim Rendern des Three.js Würfels: ${e.message}</p>`;
+                }
+                
+                resolve();
+            });
+        }
+        
+        // Zeige finale Ergebnisse
+        function showFinalResults() {
+            resultsDiv.innerHTML = '<h2>Testergebnisse:</h2>';
+            
+            if (webglSupported) {
+                resultsDiv.innerHTML += '<p class="pass">✓ WebGL wird unterstützt</p>';
+            } else {
+                resultsDiv.innerHTML += '<p class="fail">✗ WebGL wird NICHT unterstützt</p>';
+            }
+            
+            if (webgl2Supported) {
+                resultsDiv.innerHTML += '<p class="pass">✓ WebGL 2 wird unterstützt</p>';
+            } else {
+                resultsDiv.innerHTML += '<p class="warning">⚠ WebGL 2 wird nicht unterstützt (ist aber optional)</p>';
+            }
+            
+            if (threejsWorks) {
+                resultsDiv.innerHTML += '<p class="pass">✓ Three.js Renderer funktioniert</p>';
+            } else {
+                resultsDiv.innerHTML += '<p class="fail">✗ Three.js Renderer funktioniert NICHT</p>';
+            }
+            
+            if (rendererWorks) {
+                resultsDiv.innerHTML += '<p class="pass">✓ Three.js 3D-Rendering funktioniert</p>';
+            } else {
+                resultsDiv.innerHTML += '<p class="fail">✗ Three.js 3D-Rendering funktioniert NICHT</p>';
+            }
+            
+            // Gesamtergebnis
+            if (webglSupported && threejsWorks && rendererWorks) {
+                resultsDiv.innerHTML += '<h3 class="pass">Alle Tests bestanden! Ihr System unterstützt Three.js und WebGL.</h3>';
+                resultsDiv.innerHTML += '<p>Das Zone X Spiel sollte auf Ihrem System funktionieren.</p>';
+            } else {
+                resultsDiv.innerHTML += '<h3 class="fail">Einige Tests sind fehlgeschlagen. Ihr System hat möglicherweise Probleme mit Three.js oder WebGL.</h3>';
+                
+                resultsDiv.innerHTML += '<p>Mögliche Lösungen:</p>';
+                resultsDiv.innerHTML += '<ul>';
+                resultsDiv.innerHTML += '<li>Aktualisieren Sie Ihren Browser</li>';
+                resultsDiv.innerHTML += '<li>Aktivieren Sie die Hardware-Beschleunigung im Browser</li>';
+                resultsDiv.innerHTML += '<li>Aktualisieren Sie Ihre Grafiktreiber</li>';
+                resultsDiv.innerHTML += '<li>Versuchen Sie einen anderen Browser</li>';
+                resultsDiv.innerHTML += '</ul>';
+            }
+            
+            // Browser-Info hinzufügen
+            resultsDiv.innerHTML += '<h3>Browser-Information:</h3>';
+            resultsDiv.innerHTML += `<p>User Agent: ${navigator.userAgent}</p>`;
+            
+            console.log("Tests abgeschlossen");
+        }
+        
+        // Starte die Tests beim Laden der Seite
+        window.addEventListener('DOMContentLoaded', runTests);
+    </script>
+</body>
+</html> 

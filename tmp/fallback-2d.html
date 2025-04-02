@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zone X - 2D Fallback</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        #game-canvas {
+            display: block;
+            background-color: #000022;
+        }
+        
+        #ui-container {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            border-radius: 5px;
+            z-index: 10;
+        }
+        
+        #ui-container div {
+            margin-bottom: 5px;
+        }
+        
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.9);
+            z-index: 100;
+        }
+        
+        #start-screen h1 {
+            color: #00ff00;
+            font-size: 36px;
+            margin-bottom: 20px;
+        }
+        
+        #start-screen p {
+            color: white;
+            margin-bottom: 10px;
+            max-width: 600px;
+            text-align: center;
+        }
+        
+        #start-button {
+            background-color: #00aa00;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 18px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        
+        #start-button:hover {
+            background-color: #00cc00;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        
+        <div id="ui-container">
+            <div id="lives">Leben: <span id="lives-count">5</span></div>
+            <div id="blocks">Blocks: <span id="blocks-count">15</span></div>
+            <div id="plutonium">Plutonium übrig: <span id="plutonium-count">5</span></div>
+            <div id="score">Punkte: <span id="score-count">0</span></div>
+            <div id="timer" class="hidden">Timer: <span id="timer-count">20</span></div>
+        </div>
+        
+        <div id="start-screen">
+            <h1>Zone X - 2D Fallback</h1>
+            <p>Diese Version verwendet den 2D-Canvas als Fallback-Lösung.</p>
+            <p>Sammle alle Plutonium-Elemente und bringe sie zu den Tonnen. Erreiche dann den Ausgang.</p>
+            <p>Steuerung: W, A, S, D zum Bewegen, Leertaste zum Platzieren von Blocks.</p>
+            <button id="start-button">Spiel starten</button>
+        </div>
+    </div>
+    
+    <script>
+        // Grundlegende Konstanten
+        const GRID_WIDTH = 20;
+        const GRID_HEIGHT = 20;
+        const CELL_SIZE = 30; // Pixel pro Zelle
+        
+        // Farben
+        const COLORS = {
+            BACKGROUND: '#000022',
+            PLAYER: '#00ff00',
+            ENEMY: '#ff0000',
+            WALL: '#888888',
+            PLUTONIUM: '#ffff00',
+            BARREL: '#8B4513',
+            BLOCK: '#00aaff',
+            EXIT: '#ff00ff',
+            GRID: '#333333'
+        };
+        
+        // Spielvariablen
+        let canvas, ctx;
+        let player = { x: 2, y: 2, direction: 0, lastX: 2, lastY: 2 };
+        let walls = [];
+        let enemies = [];
+        let plutonium = [];
+        let barrels = [];
+        let blocks = [];
+        let exit = { x: 15, y: 15 };
+        let lives = 5;
+        let blocksCount = 15;
+        let score = 0;
+        let plutoniumTimer = 0;
+        let plutoniumCollected = false;
+        let exitReached = false;
+        let gameRunning = false;
+        
+        // Input
+        let keys = {
+            up: false,
+            down: false,
+            left: false,
+            right: false,
+            action: false
+        };
+        
+        // Initialisierung
+        function init() {
+            console.log("Initialisiere 2D-Fallback...");
+            
+            // Canvas einrichten
+            canvas = document.getElementById('game-canvas');
+            ctx = canvas.getContext('2d');
+            
+            // Canvas an Fenstergröße anpassen
+            resizeCanvas();
+            
+            // Event-Listener
+            window.addEventListener('resize', resizeCanvas);
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+            
+            // Level erstellen
+            createWalls();
+            createEnemies();
+            createPlutionium();
+            createBarrels();
+            
+            // UI aktualisieren
+            updateUI();
+            
+            // Spielschleife starten
+            gameRunning = true;
+            requestAnimationFrame(gameLoop);
+            
+            console.log("Spiel initialisiert und gestartet");
+        }
+        
+        // Canvas-Größe anpassen
+        function resizeCanvas() {
+            const container = document.getElementById('game-container');
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+        }
+        
+        // Level erstellen - Wände
+        function createWalls() {
+            walls = [];
+            
+            // Außenwände
+            for (let x = 0; x < GRID_WIDTH; x++) {
+                for (let y = 0; y < GRID_HEIGHT; y++) {
+                    if (x === 0 || x === GRID_WIDTH - 1 || y === 0 || y === GRID_HEIGHT - 1) {
+                        walls.push({ x, y });
+                    }
+                }
+            }
+            
+            // Einige zufällige Wände im Inneren
+            for (let i = 0; i < 20; i++) {
+                const x = Math.floor(Math.random() * (GRID_WIDTH - 2)) + 1;
+                const y = Math.floor(Math.random() * (GRID_HEIGHT - 2)) + 1;
+                
+                // Nicht auf Spielerposition
+                if (x !== player.x || y !== player.y) {
+                    walls.push({ x, y });
+                }
+            }
+        }
+        
+        // Feinde erstellen
+        function createEnemies() {
+            enemies = [];
+            
+            for (let i = 0; i < 5; i++) {
+                let x, y;
+                let validPosition = false;
+                
+                // Finde eine gültige Position
+                while (!validPosition) {
+                    x = Math.floor(Math.random() * (GRID_WIDTH - 2)) + 1;
+                    y = Math.floor(Math.random() * (GRID_HEIGHT - 2)) + 1;
+                    
+                    // Prüfe, ob Position frei ist
+                    if (!isWall(x, y) && (x !== player.x || y !== player.y)) {
+                        validPosition = true;
+                    }
+                }
+                
+                enemies.push({
+                    x, y,
+                    direction: Math.floor(Math.random() * 4),
+                    speed: 1 + Math.random() * 0.5
+                });
+            }
+        }
+        
+        // Plutonium erstellen
+        function createPlutionium() {
+            plutonium = [];
+            
+            for (let i = 0; i < 5; i++) {
+                let x, y;
+                let validPosition = false;
+                
+                while (!validPosition) {
+                    x = Math.floor(Math.random() * (GRID_WIDTH - 2)) + 1;
+                    y = Math.floor(Math.random() * (GRID_HEIGHT - 2)) + 1;
+                    
+                    if (!isWall(x, y) && !isEnemy(x, y) && (x !== player.x || y !== player.y)) {
+                        validPosition = true;
+                    }
+                }
+                
+                plutonium.push({ x, y });
+            }
+        }
+        
+        // Tonnen erstellen
+        function createBarrels() {
+            barrels = [];
+            
+            for (let i = 0; i < 3; i++) {
+                let x, y;
+                let validPosition = false;
+                
+                while (!validPosition) {
+                    x = Math.floor(Math.random() * (GRID_WIDTH - 2)) + 1;
+                    y = Math.floor(Math.random() * (GRID_HEIGHT - 2)) + 1;
+                    
+                    if (!isWall(x, y) && !isEnemy(x, y) && !isPlutonium(x, y) && (x !== player.x || y !== player.y)) {
+                        validPosition = true;
+                    }
+                }
+                
+                barrels.push({ x, y });
+            }
+        }
+        
+        // Kollisionsabfragen
+        function isWall(x, y) {
+            return walls.some(wall => wall.x === x && wall.y === y);
+        }
+        
+        function isEnemy(x, y) {
+            return enemies.some(enemy => enemy.x === x && enemy.y === y);
+        }
+        
+        function isPlutonium(x, y) {
+            return plutonium.some(p => p.x === x && p.y === y);
+        }
+        
+        function isBarrel(x, y) {
+            return barrels.some(barrel => barrel.x === x && barrel.y === y);
+        }
+        
+        function isBlock(x, y) {
+            return blocks.some(block => block.x === x && block.y === y);
+        }
+        
+        // Eingabe-Handler
+        function handleKeyDown(e) {
+            if (!gameRunning) return;
+            
+            switch (e.key.toLowerCase()) {
+                case 'w': keys.up = true; break;
+                case 'a': keys.left = true; break;
+                case 's': keys.down = true; break;
+                case 'd': keys.right = true; break;
+                case ' ': keys.action = true; break;
+            }
+        }
+        
+        function handleKeyUp(e) {
+            if (!gameRunning) return;
+            
+            switch (e.key.toLowerCase()) {
+                case 'w': keys.up = false; break;
+                case 'a': keys.left = false; break;
+                case 's': keys.down = false; break;
+                case 'd': keys.right = false; break;
+                case ' ': 
+                    keys.action = false;
+                    placeBlock();
+                    break;
+            }
+        }
+        
+        // Block platzieren
+        function placeBlock() {
+            if (blocksCount > 0) {
+                // Block hinter dem Spieler platzieren
+                const dx = player.x - player.lastX;
+                const dy = player.y - player.lastY;
+                
+                if (dx === 0 && dy === 0) return; // Spieler hat sich nicht bewegt
+                
+                const blockX = player.x - dx;
+                const blockY = player.y - dy;
+                
+                // Prüfen, ob Position gültig ist
+                if (!isWall(blockX, blockY) && !isEnemy(blockX, blockY) && !isBarrel(blockX, blockY) && !isBlock(blockX, blockY)) {
+                    blocks.push({ x: blockX, y: blockY });
+                    blocksCount--;
+                    updateUI();
+                }
+            }
+        }
+        
+        // Spieler bewegen
+        function movePlayer() {
+            // Aktuelle Position speichern
+            player.lastX = player.x;
+            player.lastY = player.y;
+            
+            // Bewegung basierend auf Eingabe
+            let newX = player.x;
+            let newY = player.y;
+            
+            if (keys.up) newY--;
+            if (keys.down) newY++;
+            if (keys.left) newX--;
+            if (keys.right) newX++;
+            
+            // Kollisionsprüfung
+            if (!isWall(newX, newY) && !isBarrel(newX, newY) && !isBlock(newX, newY)) {
+                player.x = newX;
+                player.y = newY;
+            }
+            
+            // Richtung setzen (für Darstellung)
+            if (keys.up) player.direction = 0;
+            if (keys.right) player.direction = 1;
+            if (keys.down) player.direction = 2;
+            if (keys.left) player.direction = 3;
+            
+            // Prüfe Kollisionen mit anderen Objekten
+            checkCollisions();
+        }
+        
+        // Kollisionen prüfen
+        function checkCollisions() {
+            // Plutonium aufsammeln
+            const plutoniumIndex = plutonium.findIndex(p => p.x === player.x && p.y === player.y);
+            if (plutoniumIndex !== -1) {
+                plutonium.splice(plutoniumIndex, 1);
+                plutoniumCollected = true;
+                plutoniumTimer = 20;
+                updateUI();
+            }
+            
+            // Plutonium in Tonne abliefern
+            if (plutoniumCollected) {
+                const barrelIndex = barrels.findIndex(b => b.x === player.x && b.y === player.y);
+                if (barrelIndex !== -1) {
+                    plutoniumCollected = false;
+                    plutoniumTimer = 0;
+                    score += 100;
+                    updateUI();
+                }
+            }
+            
+            // Ausgang erreichen
+            if (player.x === exit.x && player.y === exit.y && plutonium.length === 0 && !plutoniumCollected) {
+                exitReached = true;
+                gameRunning = false;
+                alert("Level geschafft! Du hast " + score + " Punkte erreicht.");
+            }
+            
+            // Kollision mit Feinden
+            if (enemies.some(enemy => enemy.x === player.x && enemy.y === player.y)) {
+                loseLife();
+            }
+        }
+        
+        // Leben verlieren
+        function loseLife() {
+            lives--;
+            updateUI();
+            
+            if (lives <= 0) {
+                gameRunning = false;
+                alert("Game Over! Du hast " + score + " Punkte erreicht.");
+            } else {
+                // Spieler zurücksetzen
+                player.x = 2;
+                player.y = 2;
+            }
+        }
+        
+        // Feinde bewegen
+        function moveEnemies() {
+            for (let enemy of enemies) {
+                // Mit zufälliger Wahrscheinlichkeit Richtung ändern
+                if (Math.random() < 0.02) {
+                    enemy.direction = Math.floor(Math.random() * 4);
+                }
+                
+                // Aktuelle Position merken
+                const oldX = enemy.x;
+                const oldY = enemy.y;
+                
+                // Bewegung basierend auf Richtung
+                switch (enemy.direction) {
+                    case 0: enemy.y--; break; // Oben
+                    case 1: enemy.x++; break; // Rechts
+                    case 2: enemy.y++; break; // Unten
+                    case 3: enemy.x--; break; // Links
+                }
+                
+                // Kollisionsprüfung
+                if (isWall(enemy.x, enemy.y) || isBarrel(enemy.x, enemy.y) || isBlock(enemy.x, enemy.y) || isEnemy(enemy.x, enemy.y)) {
+                    // Zurücksetzen und Richtung ändern
+                    enemy.x = oldX;
+                    enemy.y = oldY;
+                    enemy.direction = Math.floor(Math.random() * 4);
+                }
+                
+                // Kollision mit Spieler
+                if (enemy.x === player.x && enemy.y === player.y) {
+                    loseLife();
+                }
+            }
+        }
+        
+        // UI aktualisieren
+        function updateUI() {
+            document.getElementById('lives-count').textContent = lives;
+            document.getElementById('blocks-count').textContent = blocksCount;
+            document.getElementById('plutonium-count').textContent = plutonium.length;
+            document.getElementById('score-count').textContent = score;
+            
+            // Timer anzeigen, wenn Plutonium gesammelt
+            const timerElement = document.getElementById('timer');
+            if (plutoniumCollected) {
+                timerElement.classList.remove('hidden');
+                document.getElementById('timer-count').textContent = Math.ceil(plutoniumTimer);
+            } else {
+                timerElement.classList.add('hidden');
+            }
+        }
+        
+        // Zeichenfunktionen
+        function draw() {
+            // Canvas leeren
+            ctx.fillStyle = COLORS.BACKGROUND;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Berechne den Viewport-Offset für Zentrierung des Spielers
+            const viewportOffsetX = canvas.width / 2 - player.x * CELL_SIZE;
+            const viewportOffsetY = canvas.height / 2 - player.y * CELL_SIZE;
+            
+            // Gitter zeichnen
+            drawGrid(viewportOffsetX, viewportOffsetY);
+            
+            // Spielelemente zeichnen
+            drawWalls(viewportOffsetX, viewportOffsetY);
+            drawPlutionium(viewportOffsetX, viewportOffsetY);
+            drawBarrels(viewportOffsetX, viewportOffsetY);
+            drawBlocks(viewportOffsetX, viewportOffsetY);
+            drawExit(viewportOffsetX, viewportOffsetY);
+            drawEnemies(viewportOffsetX, viewportOffsetY);
+            drawPlayer(viewportOffsetX, viewportOffsetY);
+        }
+        
+        // Gitter zeichnen
+        function drawGrid(offsetX, offsetY) {
+            ctx.strokeStyle = COLORS.GRID;
+            ctx.lineWidth = 0.5;
+            
+            // Horizontale Linien
+            for (let y = 0; y <= GRID_HEIGHT; y++) {
+                ctx.beginPath();
+                ctx.moveTo(offsetX, offsetY + y * CELL_SIZE);
+                ctx.lineTo(offsetX + GRID_WIDTH * CELL_SIZE, offsetY + y * CELL_SIZE);
+                ctx.stroke();
+            }
+            
+            // Vertikale Linien
+            for (let x = 0; x <= GRID_WIDTH; x++) {
+                ctx.beginPath();
+                ctx.moveTo(offsetX + x * CELL_SIZE, offsetY);
+                ctx.lineTo(offsetX + x * CELL_SIZE, offsetY + GRID_HEIGHT * CELL_SIZE);
+                ctx.stroke();
+            }
+        }
+        
+        // Wände zeichnen
+        function drawWalls(offsetX, offsetY) {
+            ctx.fillStyle = COLORS.WALL;
+            
+            for (let wall of walls) {
+                ctx.fillRect(
+                    offsetX + wall.x * CELL_SIZE, 
+                    offsetY + wall.y * CELL_SIZE, 
+                    CELL_SIZE, 
+                    CELL_SIZE
+                );
+            }
+        }
+        
+        // Spieler zeichnen
+        function drawPlayer(offsetX, offsetY) {
+            ctx.fillStyle = COLORS.PLAYER;
+            
+            // Spielerkörper zeichnen (Kreis)
+            ctx.beginPath();
+            ctx.arc(
+                offsetX + player.x * CELL_SIZE + CELL_SIZE / 2,
+                offsetY + player.y * CELL_SIZE + CELL_SIZE / 2,
+                CELL_SIZE / 2 - 2,
+                0, 
+                Math.PI * 2
+            );
+            ctx.fill();
+            
+            // Richtungsanzeige
+            ctx.fillStyle = '#000';
+            const dirX = Math.cos(player.direction * Math.PI / 2);
+            const dirY = Math.sin(player.direction * Math.PI / 2);
+            
+            ctx.beginPath();
+            ctx.arc(
+                offsetX + player.x * CELL_SIZE + CELL_SIZE / 2 + dirX * CELL_SIZE / 4,
+                offsetY + player.y * CELL_SIZE + CELL_SIZE / 2 + dirY * CELL_SIZE / 4,
+                CELL_SIZE / 6,
+                0, 
+                Math.PI * 2
+            );
+            ctx.fill();
+        }
+        
+        // Feinde zeichnen
+        function drawEnemies(offsetX, offsetY) {
+            ctx.fillStyle = COLORS.ENEMY;
+            
+            for (let enemy of enemies) {
+                // Feindkörper (Quadrat mit abgerundeten Ecken)
+                const x = offsetX + enemy.x * CELL_SIZE;
+                const y = offsetY + enemy.y * CELL_SIZE;
+                const size = CELL_SIZE - 4;
+                const radius = 5;
+                
+                ctx.beginPath();
+                ctx.moveTo(x + radius, y);
+                ctx.lineTo(x + size - radius, y);
+                ctx.quadraticCurveTo(x + size, y, x + size, y + radius);
+                ctx.lineTo(x + size, y + size - radius);
+                ctx.quadraticCurveTo(x + size, y + size, x + size - radius, y + size);
+                ctx.lineTo(x + radius, y + size);
+                ctx.quadraticCurveTo(x, y + size, x, y + size - radius);
+                ctx.lineTo(x, y + radius);
+                ctx.quadraticCurveTo(x, y, x + radius, y);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Augen
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(x + size / 3, y + size / 3, size / 10, 0, Math.PI * 2);
+                ctx.arc(x + size * 2/3, y + size / 3, size / 10, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = COLORS.ENEMY;
+            }
+        }
+        
+        // Plutonium zeichnen
+        function drawPlutionium(offsetX, offsetY) {
+            ctx.fillStyle = COLORS.PLUTONIUM;
+            
+            for (let p of plutonium) {
+                const centerX = offsetX + p.x * CELL_SIZE + CELL_SIZE / 2;
+                const centerY = offsetY + p.y * CELL_SIZE + CELL_SIZE / 2;
+                const radius = CELL_SIZE / 3;
+                
+                // Strahlendes Plutonium zeichnen
+                ctx.beginPath();
+                for (let i = 0; i < 8; i++) {
+                    const angle = i * Math.PI / 4;
+                    const innerRadius = radius / 2;
+                    
+                    ctx.lineTo(
+                        centerX + Math.cos(angle) * radius,
+                        centerY + Math.sin(angle) * radius
+                    );
+                    
+                    ctx.lineTo(
+                        centerX + Math.cos(angle + Math.PI / 8) * innerRadius,
+                        centerY + Math.sin(angle + Math.PI / 8) * innerRadius
+                    );
+                }
+                ctx.closePath();
+                ctx.fill();
+            }
+            
+            // Anzeige für gesammeltes Plutonium
+            if (plutoniumCollected) {
+                ctx.fillStyle = COLORS.PLUTONIUM;
+                ctx.beginPath();
+                ctx.arc(
+                    offsetX + player.x * CELL_SIZE + CELL_SIZE / 2,
+                    offsetY + player.y * CELL_SIZE - CELL_SIZE / 4,
+                    CELL_SIZE / 6,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+            }
+        }
+        
+        // Tonnen zeichnen
+        function drawBarrels(offsetX, offsetY) {
+            ctx.fillStyle = COLORS.BARREL;
+            
+            for (let barrel of barrels) {
+                const x = offsetX + barrel.x * CELL_SIZE + 2;
+                const y = offsetY + barrel.y * CELL_SIZE + 2;
+                const width = CELL_SIZE - 4;
+                const height = CELL_SIZE - 4;
+                
+                // Tonne zeichnen
+                ctx.fillRect(x, y, width, height);
+                
+                // Details hinzufügen
+                ctx.strokeStyle = '#444';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(x, y + height / 3);
+                ctx.lineTo(x + width, y + height / 3);
+                ctx.moveTo(x, y + height * 2/3);
+                ctx.lineTo(x + width, y + height * 2/3);
+                ctx.stroke();
+            }
+        }
+        
+        // Blocks zeichnen
+        function drawBlocks(offsetX, offsetY) {
+            ctx.fillStyle = COLORS.BLOCK;
+            
+            for (let block of blocks) {
+                ctx.fillRect(
+                    offsetX + block.x * CELL_SIZE + 2,
+                    offsetY + block.y * CELL_SIZE + 2,
+                    CELL_SIZE - 4,
+                    CELL_SIZE - 4
+                );
+            }
+        }
+        
+        // Ausgang zeichnen
+        function drawExit(offsetX, offsetY) {
+            const x = offsetX + exit.x * CELL_SIZE;
+            const y = offsetY + exit.y * CELL_SIZE;
+            
+            // Exit pulsiert, wenn alle Plutoniumproben abgeliefert wurden
+            if (plutonium.length === 0 && !plutoniumCollected) {
+                const pulseSize = 0.1 * Math.sin(Date.now() / 200) + 1.0;
+                
+                ctx.fillStyle = COLORS.EXIT;
+                ctx.fillRect(
+                    x + CELL_SIZE / 2 * (1 - pulseSize),
+                    y + CELL_SIZE / 2 * (1 - pulseSize),
+                    CELL_SIZE * pulseSize,
+                    CELL_SIZE * pulseSize
+                );
+            } else {
+                ctx.fillStyle = '#333';
+                ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+                
+                ctx.fillStyle = COLORS.EXIT;
+                ctx.fillRect(x + 5, y + 5, CELL_SIZE - 10, CELL_SIZE - 10);
+            }
+        }
+        
+        // Spielschleife
+        let lastTime = 0;
+        function gameLoop(timestamp) {
+            // Delta-Zeit berechnen
+            const deltaTime = (timestamp - lastTime) / 1000; // in Sekunden
+            lastTime = timestamp;
+            
+            // Spiellogik nur aktualisieren, wenn das Spiel läuft
+            if (gameRunning) {
+                movePlayer();
+                moveEnemies();
+                
+                // Plutonium-Timer aktualisieren
+                if (plutoniumCollected) {
+                    plutoniumTimer -= deltaTime;
+                    
+                    if (plutoniumTimer <= 0) {
+                        plutoniumCollected = false;
+                        plutoniumTimer = 0;
+                        loseLife();
+                    }
+                    
+                    updateUI();
+                }
+            }
+            
+            // Zeichnen
+            draw();
+            
+            // Nächsten Frame anfordern
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Start-Button-Handler
+        document.getElementById('start-button').addEventListener('click', function() {
+            document.getElementById('start-screen').classList.add('hidden');
+            init();
+        });
+    </script>
+</body>
+</html> 

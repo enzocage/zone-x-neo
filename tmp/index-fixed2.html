@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zone X - Fixed (Debug)</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Zusätzliche Debug-Stile */
+        #debug-container {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 300px;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.8);
+            color: #0f0;
+            padding: 10px;
+            overflow-y: auto;
+            font-family: monospace;
+            z-index: 9999;
+            border-left: 2px solid #0f0;
+        }
+        
+        #debug-list {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        #debug-list li {
+            margin-bottom: 3px;
+            border-bottom: 1px dotted #0a0;
+            padding-bottom: 3px;
+        }
+        
+        .debug-success { color: #0f0; }
+        .debug-error { color: #f00; }
+        .debug-warning { color: #ff0; }
+        
+        #debug-toggle {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #0f0;
+            border: 1px solid #0f0;
+            padding: 5px;
+            cursor: pointer;
+            z-index: 10000;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+</head>
+<body>
+    <!-- Debug-Toggle-Button -->
+    <button id="debug-toggle">Debug: ON</button>
+    
+    <!-- Debug-Container direkt sichtbar machen -->
+    <div id="debug-container">
+        <h3>Debug-Ausgabe</h3>
+        <ul id="debug-list">
+            <li>Debug-Modus initialisiert...</li>
+        </ul>
+    </div>
+
+    <div id="game-container">
+        <div id="ui-container">
+            <div id="lives">Leben: <span id="lives-count">5</span></div>
+            <div id="blocks">Blocks: <span id="blocks-count">15</span></div>
+            <div id="plutonium">Plutonium übrig: <span id="plutonium-count">5</span></div>
+            <div id="score">Punkte: <span id="score-count">0</span></div>
+            <div id="timer" class="hidden">Timer: <span id="timer-count">20</span></div>
+        </div>
+        <!-- Das Canvas-Element für das Spiel -->
+        <canvas id="game-canvas"></canvas>
+        <div id="start-screen">
+            <h1>Zone X</h1>
+            <p>Sammle alle Plutonium-Elemente und bringe sie zu den Tonnen. Erreiche dann den Ausgang.</p>
+            <p>Steuerung: W, A, S, D zum Bewegen, Leertaste zum Platzieren von Blocks.</p>
+            <button id="start-button">Spiel starten</button>
+            <div id="error-message" style="color: red; margin-top: 20px;"></div>
+            
+            <div class="links" style="margin-top: 20px;">
+                <p>Alternativen:</p>
+                <ul>
+                    <li><a href="debug.html" style="color: yellow;">WebGL-Test ausführen</a></li>
+                    <li><a href="simple.html" style="color: lightgreen;">Einfache Version starten</a></li>
+                    <li><a href="reduced.html" style="color: lightblue;">Reduzierte Version starten</a></li>
+                    <li><a href="hybrid.html" style="color: pink;">Hybrid-Version starten</a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Debug-Toggle-Button Funktionalität
+        document.getElementById('debug-toggle').addEventListener('click', function() {
+            const debugContainer = document.getElementById('debug-container');
+            if (debugContainer.style.display === 'none') {
+                debugContainer.style.display = 'block';
+                this.textContent = 'Debug: ON';
+            } else {
+                debugContainer.style.display = 'none';
+                this.textContent = 'Debug: OFF';
+            }
+        });
+        
+        // Verbesserte Debug-Funktion
+        window.debugLog = function(message, type = 'info') {
+            console.log('[DEBUG] ' + message);
+            
+            // Finde das Debug-Listen-Element
+            const list = document.getElementById('debug-list');
+            if (!list) {
+                console.error('Debug-Liste nicht gefunden!');
+                return;
+            }
+            
+            // Erstelle ein neues Listenelement
+            const item = document.createElement('li');
+            
+            // Füge Klassennamen basierend auf dem Typ hinzu
+            if (type === 'success') {
+                item.className = 'debug-success';
+                message = '✓ ' + message;
+            } else if (type === 'error') {
+                item.className = 'debug-error';
+                message = '✗ ' + message;
+            } else if (type === 'warning') {
+                item.className = 'debug-warning';
+                message = '⚠ ' + message;
+            }
+            
+            item.textContent = message;
+            list.appendChild(item);
+            
+            // Scroll zum Ende der Liste
+            list.scrollTop = list.scrollHeight;
+        };
+        
+        // Direkt einen Test-Log ausgeben
+        debugLog('Debug-System initialisiert', 'success');
+    </script>
+    
+    <!-- Inline-Definitionen von CONFIG und Utils für globale Verfügbarkeit -->
+    <script>
+        debugLog('Definiere globale Konfiguration...');
+        
+        // Stelle sicher, dass diese Variablen global definiert werden
+        window.CONFIG = {
+            GRID_WIDTH: 64,
+            GRID_HEIGHT: 32,
+            TILE_SIZE: 1, // Auf 1 gesetzt für Kompatibilität
+            USE_FALLBACK_LEVEL: true,
+            CAMERA_FOV: 75,
+            CAMERA_NEAR: 0.1,
+            CAMERA_FAR: 1000,
+            CAMERA_POSITION: { x: 0, y: 0, z: 10 },
+            PLAYER_SPEED: 2,
+            PLAYER_INITIAL_LIVES: 5,
+            PLAYER_INITIAL_BLOCKS: 15,
+            ENEMY_SPEED: 1.2,
+            PLUTONIUM_COUNT: 5,
+            BARREL_COUNT: 3,
+            PLUTONIUM_TIMER: 20,
+            COLORS: {
+                PLAYER: 0x00ff00,
+                ENEMY: 0xff0000,
+                WALL: 0x888888,
+                PLUTONIUM: 0xffff00,
+                BARREL: 0x8B4513,
+                BLOCK: 0x00aaff,
+                EXIT: 0xff00ff,
+                START: 0x0000ff,
+                BACKGROUND: 0x000000
+            },
+            LEVEL_PATH: 'levels/',
+            FALLBACK_LEVEL: [
+                "████████████████████",
+                "█O                 █",
+                "█  ███████████    █",
+                "█  █         █    █",
+                "█  █  r      █    █",
+                "█  █    ████ █    █",
+                "█  █    █  █ █    █",
+                "█  ███  █  █X█    █",
+                "█    █  ████ █    █",
+                "█    █       █    █",
+                "█    █████████    █",
+                "█                 █",
+                "█ █████████████   █",
+                "█ █X            █ █",
+                "█ █        r    █ █",
+                "█ █  █████      █ █",
+                "█ █  █K  █      █ █",
+                "█ █  ████       █ █",
+                "█A█              █ █",
+                "████████████████████"
+            ],
+            SYMBOLS: {
+                WALL: '█',
+                PLAYER: 'O',
+                ENEMY_RIGHT: 'r',
+                ENEMY_LEFT: 'l',
+                BARREL: 'K',
+                PLUTONIUM: 'X',
+                EXIT: 'A',
+                EMPTY: ' ',
+                ENEMY_UP: 'u',
+                ENEMY_DOWN: 'd',
+                ENEMY_RIGHT_SLASH: 'r/',
+                ENEMY_LEFT_SLASH: 'l/',
+                BLOCK: 'M',
+                UNKNOWN: '?',
+                DONUT: 'ᴗ',
+                DIRECTION_RIGHT: 'R',
+                DIRECTION_LEFT: 'L/',
+                DIRECTION_UP: 'U',
+                DIRECTION_DOWN: 'D',
+                DIRECTION_IDLE: 'I'
+            }
+        };
+        
+        debugLog('CONFIG definiert', 'success');
+        
+        // Stellt Utils als globales Objekt zur Verfügung
+        window.Utils = {
+            gridToWorld: function(x, y) {
+                return {
+                    x: (x - CONFIG.GRID_WIDTH / 2) * CONFIG.TILE_SIZE,
+                    y: (CONFIG.GRID_HEIGHT / 2 - y) * CONFIG.TILE_SIZE
+                };
+            },
+            isInBounds: function(x, y) {
+                return x >= 0 && x < CONFIG.GRID_WIDTH && y >= 0 && y < CONFIG.GRID_HEIGHT;
+            },
+            loadCSV: function(url) {
+                debugLog('Versuche CSV zu laden: ' + url);
+                
+                return new Promise((resolve, reject) => {
+                    console.log('Versuche zu laden:', url);
+                    
+                    fetch(url)
+                        .then(response => {
+                            if (!response.ok) {
+                                debugLog('HTTP Fehler: ' + response.status, 'error');
+                                throw new Error(`HTTP error! Status: ${response.status}`);
+                            }
+                            return response.text();
+                        })
+                        .then(csv => {
+                            if (!csv || csv.trim() === '') {
+                                debugLog('CSV-Inhalt ist leer', 'error');
+                                throw new Error('CSV-Inhalt ist leer');
+                            }
+                            
+                            const rows = csv.split('\n');
+                            debugLog('CSV geladen: ' + rows.length + ' Zeilen', 'success');
+                            
+                            const grid = [];
+                            
+                            for (let y = 0; y < rows.length; y++) {
+                                if (rows[y].trim() === '') continue;
+                                
+                                const cells = rows[y].split(',');
+                                grid.push(cells);
+                            }
+                            
+                            if (grid.length === 0) {
+                                debugLog('Grid ist leer nach dem Parsen', 'error');
+                                throw new Error('Grid ist leer nach dem Parsen');
+                            }
+                            
+                            resolve(grid);
+                        })
+                        .catch(error => {
+                            debugLog('Fehler beim Laden der CSV-Datei: ' + error.message, 'error');
+                            reject(error);
+                        });
+                });
+            }
+        };
+        
+        debugLog('Utils definiert', 'success');
+    </script>
+    
+    <script>
+        debugLog('Lade externe Skript-Dateien...');
+        
+        // Funktion zum Laden von Skripten mit Statusanzeige
+        function loadScript(url, callback) {
+            debugLog('Lade Skript: ' + url);
+            
+            const script = document.createElement('script');
+            script.type = 'text/javascript';
+            
+            script.onload = function() {
+                debugLog('Skript geladen: ' + url, 'success');
+                if (callback) callback(true);
+            };
+            
+            script.onerror = function() {
+                debugLog('Fehler beim Laden von: ' + url, 'error');
+                if (callback) callback(false);
+            };
+            
+            script.src = url;
+            document.head.appendChild(script);
+        }
+        
+        // Lade Skripte sequentiell in der richtigen Reihenfolge
+        loadScript('js/player.js', function(success) {
+            if (!success) return;
+            
+            loadScript('js/enemy.js', function(success) {
+                if (!success) return;
+                
+                loadScript('js/level.js', function(success) {
+                    if (!success) return;
+                    
+                    loadScript('js/ui.js', function(success) {
+                        if (!success) return;
+                        
+                        loadScript('js/game.js', function(success) {
+                            if (!success) return;
+                            
+                            debugLog('Alle Skripte geladen', 'success');
+                            
+                            // Überprüfe, ob alle Klassen verfügbar sind
+                            setTimeout(function() {
+                                checkClasses();
+                            }, 500);
+                        });
+                    });
+                });
+            });
+        });
+        
+        // Überprüfe, ob alle Klassen korrekt geladen wurden
+        function checkClasses() {
+            debugLog('Prüfe Verfügbarkeit der Klassen:');
+            
+            const classes = [
+                { name: 'Player', global: window.Player },
+                { name: 'Enemy', global: window.Enemy },
+                { name: 'Level', global: window.Level },
+                { name: 'UI', global: window.UI },
+                { name: 'Game', global: window.Game }
+            ];
+            
+            let allLoaded = true;
+            
+            for (const cls of classes) {
+                if (typeof cls.global !== 'undefined') {
+                    debugLog('Klasse ' + cls.name + ' gefunden ✓', 'success');
+                } else {
+                    debugLog('Klasse ' + cls.name + ' fehlt ✗', 'error');
+                    allLoaded = false;
+                }
+            }
+            
+            if (allLoaded) {
+                debugLog('Alle Klassen erfolgreich geladen', 'success');
+                
+                // Canvas-Element prüfen
+                const canvas = document.getElementById('game-canvas');
+                if (!canvas) {
+                    debugLog('Canvas-Element nicht gefunden', 'error');
+                    return;
+                }
+                
+                debugLog('Canvas-Element gefunden: ' + canvas.tagName, 'success');
+                
+                // Aktiviere den Start-Button
+                const startButton = document.getElementById('start-button');
+                startButton.disabled = false;
+                startButton.style.backgroundColor = '#4CAF50';
+                debugLog('Spiel bereit zum Starten', 'success');
+            } else {
+                debugLog('Nicht alle Klassen wurden geladen. Spiel kann nicht gestartet werden.', 'error');
+            }
+        }
+        
+        // Initialisiere Start-Button
+        window.addEventListener('load', function() {
+            debugLog('Seite vollständig geladen');
+            
+            const startButton = document.getElementById('start-button');
+            startButton.disabled = true;
+            
+            // Three.js prüfen
+            if (typeof THREE === 'undefined') {
+                debugLog('Three.js nicht geladen!', 'error');
+                document.getElementById('error-message').textContent = 
+                    'Fehler: Three.js konnte nicht geladen werden.';
+                return;
+            }
+            
+            debugLog('Three.js geladen (Version ' + THREE.REVISION + ')', 'success');
+            
+            // WebGL-Unterstützung testen
+            try {
+                const canvas = document.getElementById('game-canvas');
+                const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                if (!gl) {
+                    debugLog('WebGL wird nicht unterstützt', 'warning');
+                } else {
+                    debugLog('WebGL wird unterstützt', 'success');
+                }
+            } catch (e) {
+                debugLog('Fehler beim WebGL-Test: ' + e.message, 'error');
+            }
+            
+            // Start-Button-Event-Listener
+            startButton.addEventListener('click', function() {
+                debugLog('Start-Button geklickt');
+                
+                // Aktiviere Fallback-Level
+                CONFIG.USE_FALLBACK_LEVEL = true;
+                
+                // Blende Startbildschirm aus
+                document.getElementById('start-screen').style.display = 'none';
+                
+                // Starte das Spiel mit kurzer Verzögerung
+                setTimeout(function() {
+                    try {
+                        debugLog('Starte Spiel...');
+                        window.game = new Game();
+                        debugLog('Spiel gestartet', 'success');
+                    } catch (error) {
+                        debugLog('Fehler beim Spielstart: ' + error.message, 'error');
+                        console.error('Fehler beim Starten des Spiels:', error);
+                        
+                        // Zeige Startbildschirm wieder an
+                        document.getElementById('start-screen').style.display = 'flex';
+                        document.getElementById('error-message').textContent = 
+                            'Fehler beim Starten des Spiels: ' + error.message;
+                    }
+                }, 100);
+            });
+        });
+    </script>
+</body>
+</html> 

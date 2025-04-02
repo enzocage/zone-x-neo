@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zone X - Direct Canvas</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            color: white;
+            font-family: sans-serif;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+        }
+        #controls {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 100;
+        }
+        button {
+            background-color: #00aa00;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            margin-right: 5px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #00cc00;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">Zone X - Direct Canvas Version</div>
+    
+    <div id="controls">
+        <button id="btn-rotate">Rotation umschalten</button>
+        <button id="btn-render">Neu rendern</button>
+        <button id="btn-camera">Kamera anpassen</button>
+    </div>
+    
+    <!-- Three.js laden -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    
+    <script>
+        // Grundlegende Variablen
+        let scene, camera, renderer;
+        let player, walls = [];
+        let isRotating = true;
+        
+        // Initialisierung
+        function init() {
+            console.log("Initialisiere Direct-Canvas-Version...");
+            
+            // Three.js Szene erstellen
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000044); // Dunkelblau
+            
+            // Orthographische Kamera erstellen
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            const aspectRatio = width / height;
+            const frustumSize = 20;
+            
+            camera = new THREE.OrthographicCamera(
+                frustumSize * aspectRatio / -2,
+                frustumSize * aspectRatio / 2,
+                frustumSize / 2,
+                frustumSize / -2,
+                0.1, 100
+            );
+            camera.position.set(10, 10, 20);
+            camera.lookAt(0, 0, 0);
+            
+            // Renderer direkt erstellen und einfügen
+            console.log("Erstelle WebGL-Renderer...");
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(width, height);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            
+            // WICHTIG: Direkt in den Body einfügen
+            document.body.appendChild(renderer.domElement);
+            console.log("Renderer-Canvas in DOM eingefügt");
+            
+            // Beleuchtung hinzufügen
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(5, 10, 7.5);
+            scene.add(directionalLight);
+            
+            // Spielfeld aufbauen
+            createLevel();
+            
+            // Event Listener
+            window.addEventListener('resize', onWindowResize);
+            document.getElementById('btn-rotate').addEventListener('click', toggleRotation);
+            document.getElementById('btn-render').addEventListener('click', forceRender);
+            document.getElementById('btn-camera').addEventListener('click', adjustCamera);
+            
+            // Animation starten
+            console.log("Starte Rendering-Loop...");
+            animate();
+            
+            // Initiales Rendering erzwingen
+            forceRender();
+            
+            console.log("Initialisierung abgeschlossen");
+        }
+        
+        // Spiel-Level erstellen
+        function createLevel() {
+            console.log("Erstelle Level...");
+            
+            // Grid-Hilfslinien
+            const grid = new THREE.GridHelper(20, 20, 0xffffff, 0x555555);
+            grid.rotation.x = Math.PI / 2;
+            scene.add(grid);
+            
+            // Achsen
+            const axesHelper = new THREE.AxesHelper(10);
+            scene.add(axesHelper);
+            
+            // Spieler
+            const playerGeometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+            const playerMaterial = new THREE.MeshLambertMaterial({ color: 0x00ff00 });
+            player = new THREE.Mesh(playerGeometry, playerMaterial);
+            player.position.set(0, 0, 0.4);
+            scene.add(player);
+            
+            // Wände
+            createWalls();
+            
+            console.log("Level erstellt");
+        }
+        
+        // Wände erstellen
+        function createWalls() {
+            const wallGeometry = new THREE.BoxGeometry(1, 1, 1);
+            const wallMaterial = new THREE.MeshLambertMaterial({ color: 0x888888 });
+            
+            // 20x20 Grid mit Wänden am Rand
+            for (let x = -10; x <= 10; x++) {
+                for (let y = -10; y <= 10; y++) {
+                    if (x === -10 || x === 10 || y === -10 || y === 10) {
+                        const wall = new THREE.Mesh(wallGeometry, wallMaterial);
+                        wall.position.set(x, y, 0.5);
+                        scene.add(wall);
+                        walls.push(wall);
+                    }
+                }
+            }
+        }
+        
+        // Fenstergrößenänderung
+        function onWindowResize() {
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            const aspectRatio = width / height;
+            const frustumSize = 20;
+            
+            camera.left = frustumSize * aspectRatio / -2;
+            camera.right = frustumSize * aspectRatio / 2;
+            camera.top = frustumSize / 2;
+            camera.bottom = frustumSize / -2;
+            
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+            
+            // Nach Größenänderung sofort rendern
+            forceRender();
+        }
+        
+        // Rotation umschalten
+        function toggleRotation() {
+            isRotating = !isRotating;
+            document.getElementById('btn-rotate').textContent = 
+                isRotating ? 'Rotation stoppen' : 'Rotation starten';
+        }
+        
+        // Rendering erzwingen
+        function forceRender() {
+            console.log("Erzwinge Rendering...");
+            if (renderer && scene && camera) {
+                renderer.render(scene, camera);
+                console.log("Rendering erzwungen");
+            } else {
+                console.error("Rendering nicht möglich:");
+                console.error("Renderer:", !!renderer);
+                console.error("Scene:", !!scene);
+                console.error("Camera:", !!camera);
+            }
+        }
+        
+        // Kamera anpassen
+        function adjustCamera() {
+            console.log("Passe Kamera an...");
+            
+            // Zufällige Kameraposition
+            const positions = [
+                { x: 10, y: 10, z: 20 },  // Schräg oben
+                { x: 0, y: 0, z: 20 },    // Direkt oben
+                { x: 20, y: 0, z: 1 },    // Seitlich
+                { x: 5, y: -5, z: 10 }    // Schräg hinten
+            ];
+            
+            const newPos = positions[Math.floor(Math.random() * positions.length)];
+            camera.position.set(newPos.x, newPos.y, newPos.z);
+            camera.lookAt(0, 0, 0);
+            
+            console.log("Neue Kameraposition:", newPos);
+            forceRender();
+        }
+        
+        // Animations-Loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Spieler rotieren
+            if (player && isRotating) {
+                player.rotation.z += 0.01;
+            }
+            
+            // Rendern
+            if (renderer && scene && camera) {
+                renderer.render(scene, camera);
+            }
+        }
+        
+        // Initialisierung starten
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html> 

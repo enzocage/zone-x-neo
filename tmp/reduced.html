@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zone X - Reduzierte Version</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100vh;
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+        }
+        #debug {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            max-height: 200px;
+            overflow-y: auto;
+            max-width: 600px;
+            font-family: monospace;
+            z-index: 100;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+</head>
+<body>
+    <div id="ui">
+        <div>Bewegen: W,A,S,D</div>
+        <div>Leben: <span id="lives">5</span></div>
+    </div>
+    <div id="debug"></div>
+    <canvas id="game-canvas"></canvas>
+
+    <script>
+        // Debug-Logging-Funktion
+        function log(message) {
+            console.log(message);
+            const debug = document.getElementById('debug');
+            debug.innerHTML += message + '<br>';
+            
+            // Scroll nach unten
+            debug.scrollTop = debug.scrollHeight;
+        }
+        
+        log('Starting Zone X Reduced Version...');
+        
+        // Minimal CONFIG
+        const CONFIG = {
+            GRID_WIDTH: 64,
+            GRID_HEIGHT: 32,
+            TILE_SIZE: 1,
+            PLAYER_SPEED: 3,
+            PLAYER_INITIAL_LIVES: 5,
+            PLAYER_INITIAL_BLOCKS: 15,
+            COLORS: {
+                PLAYER: 0x00ff00,
+                ENEMY: 0xff0000,
+                WALL: 0x888888,
+                PLUTONIUM: 0xffff00,
+                BARREL: 0x8B4513,
+                BLOCK: 0x00aaff,
+                EXIT: 0xff00ff,
+                BACKGROUND: 0x000000
+            }
+        };
+        
+        // Minimal Utils
+        const Utils = {
+            gridToWorld: function(x, y) {
+                return {
+                    x: (x - CONFIG.GRID_WIDTH / 2),
+                    y: (CONFIG.GRID_HEIGHT / 2 - y)
+                };
+            },
+            isInBounds: function(x, y) {
+                return x >= 0 && x < CONFIG.GRID_WIDTH && y >= 0 && y < CONFIG.GRID_HEIGHT;
+            }
+        };
+        
+        // Hauptspiel
+        class Game {
+            constructor() {
+                this.scene = null;
+                this.camera = null;
+                this.renderer = null;
+                this.player = null;
+                this.input = {
+                    up: false,
+                    down: false,
+                    left: false,
+                    right: false
+                };
+                this.deltaTime = 0;
+                this.lastTime = 0;
+                this.zoomFactor = 1.0;
+                this.grid = [];
+                this.walls = [];
+                
+                log('Initialisiere Spiel...');
+                this.init();
+            }
+            
+            init() {
+                try {
+                    // Three.js Scene initialisieren
+                    log('Erstelle Scene...');
+                    this.scene = new THREE.Scene();
+                    this.scene.background = new THREE.Color(CONFIG.COLORS.BACKGROUND);
+                    
+                    // Orthographische Kamera erstellen
+                    log('Erstelle Kamera...');
+                    const aspect = window.innerWidth / window.innerHeight;
+                    const frustrumSize = 20;
+                    this.camera = new THREE.OrthographicCamera(
+                        frustrumSize * aspect / -2,
+                        frustrumSize * aspect / 2,
+                        frustrumSize / 2,
+                        frustrumSize / -2,
+                        1,
+                        1000
+                    );
+                    this.camera.position.set(0, 0, 10);
+                    this.camera.lookAt(0, 0, 0);
+                    
+                    // Renderer erstellen
+                    log('Erstelle Renderer...');
+                    const canvas = document.getElementById('game-canvas');
+                    this.renderer = new THREE.WebGLRenderer({ 
+                        canvas: canvas,
+                        antialias: true 
+                    });
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                    
+                    // Lichter hinzufügen
+                    log('Füge Lichter hinzu...');
+                    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                    this.scene.add(ambientLight);
+                    
+                    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                    directionalLight.position.set(10, 20, 30);
+                    this.scene.add(directionalLight);
+                    
+                    // Level erstellen
+                    log('Erstelle Level...');
+                    this.createLevel();
+                    
+                    // Spieler erstellen
+                    log('Erstelle Spieler...');
+                    this.player = new Player(this, 5, 5);
+                    
+                    // Event-Listener
+                    log('Registriere Event-Listener...');
+                    window.addEventListener('keydown', this.handleKeyDown.bind(this));
+                    window.addEventListener('keyup', this.handleKeyUp.bind(this));
+                    window.addEventListener('resize', this.handleResize.bind(this));
+                    
+                    // Animation starten
+                    log('Starte Animation...');
+                    this.animate(0);
+                    
+                    log('Initialisierung abgeschlossen!');
+                } catch (error) {
+                    log('FEHLER bei Initialisierung: ' + error);
+                    console.error(error);
+                }
+            }
+            
+            createLevel() {
+                // Erstelle Wände
+                log('Erstelle Wände...');
+                const wallGeometry = new THREE.BoxGeometry(1, 1, 1);
+                const wallMaterial = new THREE.MeshLambertMaterial({ color: CONFIG.COLORS.WALL });
+                
+                // Erstelle Wand am Rand
+                for (let x = 0; x < CONFIG.GRID_WIDTH; x++) {
+                    for (let y = 0; y < CONFIG.GRID_HEIGHT; y++) {
+                        if (x === 0 || y === 0 || x === CONFIG.GRID_WIDTH - 1 || y === CONFIG.GRID_HEIGHT - 1) {
+                            const wall = new THREE.Mesh(wallGeometry, wallMaterial);
+                            const worldPos = Utils.gridToWorld(x, y);
+                            wall.position.set(worldPos.x, worldPos.y, 0.5);
+                            wall.userData = { type: 'wall' };
+                            
+                            this.scene.add(wall);
+                            this.walls.push({ x, y });
+                            
+                            // Markiere im Grid
+                            if (!this.grid[y]) this.grid[y] = [];
+                            this.grid[y][x] = 'wall';
+                        }
+                    }
+                }
+            }
+            
+            handleKeyDown(event) {
+                switch (event.key.toLowerCase()) {
+                    case 'w':
+                        this.input.up = true;
+                        break;
+                    case 'a':
+                        this.input.left = true;
+                        break;
+                    case 's':
+                        this.input.down = true;
+                        break;
+                    case 'd':
+                        this.input.right = true;
+                        break;
+                }
+            }
+            
+            handleKeyUp(event) {
+                switch (event.key.toLowerCase()) {
+                    case 'w':
+                        this.input.up = false;
+                        break;
+                    case 'a':
+                        this.input.left = false;
+                        break;
+                    case 's':
+                        this.input.down = false;
+                        break;
+                    case 'd':
+                        this.input.right = false;
+                        break;
+                }
+            }
+            
+            handleResize() {
+                const aspect = window.innerWidth / window.innerHeight;
+                const frustrumSize = 20 * this.zoomFactor;
+                
+                this.camera.left = frustrumSize * aspect / -2;
+                this.camera.right = frustrumSize * aspect / 2;
+                this.camera.top = frustrumSize / 2;
+                this.camera.bottom = frustrumSize / -2;
+                
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+            
+            processInput() {
+                if (!this.player || this.player.isMoving) return;
+                
+                if (this.input.up) {
+                    this.player.move(0, -1);
+                } else if (this.input.down) {
+                    this.player.move(0, 1);
+                } else if (this.input.left) {
+                    this.player.move(-1, 0);
+                } else if (this.input.right) {
+                    this.player.move(1, 0);
+                }
+            }
+            
+            update(time) {
+                try {
+                    // Berechne Delta-Zeit
+                    this.deltaTime = (time - this.lastTime) / 1000; // in Sekunden
+                    this.lastTime = time;
+                    
+                    // Begrenze die Delta-Zeit (bei Tab-Wechsel etc.)
+                    if (this.deltaTime > 0.1) this.deltaTime = 0.1;
+                    
+                    // Verarbeite Eingaben
+                    this.processInput();
+                    
+                    // Aktualisiere Spieler
+                    if (this.player) {
+                        this.player.update();
+                    }
+                } catch (error) {
+                    log('FEHLER im Update: ' + error);
+                }
+            }
+            
+            // Aktualisiert die Kameraposition (folgt dem Spieler)
+            updateCamera() {
+                if (!this.player) return;
+                
+                const worldPos = Utils.gridToWorld(this.player.x, this.player.y);
+                this.camera.position.x = worldPos.x;
+                this.camera.position.y = worldPos.y;
+            }
+            
+            render() {
+                try {
+                    this.renderer.render(this.scene, this.camera);
+                } catch (error) {
+                    log('FEHLER beim Rendern: ' + error);
+                }
+            }
+            
+            animate(time) {
+                try {
+                    requestAnimationFrame(this.animate.bind(this));
+                    this.update(time);
+                    this.render();
+                } catch (error) {
+                    log('FEHLER in der Animations-Schleife: ' + error);
+                }
+            }
+            
+            // Prüft, ob an einer Position eine Wand ist
+            isWall(x, y) {
+                if (!Utils.isInBounds(x, y)) return true;
+                return this.grid[y] && this.grid[y][x] === 'wall';
+            }
+        }
+        
+        // Spieler-Klasse
+        class Player {
+            constructor(game, x, y) {
+                this.game = game;
+                this.gridX = x;
+                this.gridY = y;
+                this.x = x;
+                this.y = y;
+                this.targetX = x;
+                this.targetY = y;
+                this.width = 0.8;
+                this.height = 0.8;
+                this.speed = CONFIG.PLAYER_SPEED;
+                this.lives = CONFIG.PLAYER_INITIAL_LIVES;
+                this.isMoving = false;
+                this.lastDirection = { x: 0, y: 0 };
+                this.mesh = null;
+                
+                this.createMesh();
+                
+                document.getElementById('lives').textContent = this.lives;
+            }
+            
+            createMesh() {
+                const geometry = new THREE.BoxGeometry(
+                    this.width, 
+                    this.height, 
+                    0.5
+                );
+                const material = new THREE.MeshLambertMaterial({ color: CONFIG.COLORS.PLAYER });
+                this.mesh = new THREE.Mesh(geometry, material);
+                
+                const worldPos = Utils.gridToWorld(this.x, this.y);
+                this.mesh.position.set(worldPos.x, worldPos.y, 0.25);
+                this.mesh.userData = { type: 'player' };
+                
+                this.game.scene.add(this.mesh);
+            }
+            
+            update() {
+                if (this.isMoving) {
+                    const dx = this.targetX - this.x;
+                    const dy = this.targetY - this.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance > 0.01) {
+                        const moveX = (dx / distance) * this.speed * this.game.deltaTime;
+                        const moveY = (dy / distance) * this.speed * this.game.deltaTime;
+                        
+                        // Beschränke die Bewegung auf die Zielposition
+                        this.x += Math.abs(moveX) > Math.abs(dx) ? dx : moveX;
+                        this.y += Math.abs(moveY) > Math.abs(dy) ? dy : moveY;
+                        
+                        // Position des Meshes aktualisieren
+                        const worldPos = Utils.gridToWorld(this.x, this.y);
+                        this.mesh.position.x = worldPos.x;
+                        this.mesh.position.y = worldPos.y;
+                        
+                        // Kameraposition aktualisieren
+                        this.game.updateCamera();
+                    } else {
+                        // Bewegung abgeschlossen
+                        this.x = this.targetX;
+                        this.y = this.targetY;
+                        this.gridX = Math.round(this.x);
+                        this.gridY = Math.round(this.y);
+                        this.isMoving = false;
+                    }
+                }
+            }
+            
+            move(dx, dy) {
+                if (this.isMoving) return;
+                
+                this.lastDirection = { x: dx, y: dy };
+                
+                const targetX = this.gridX + dx;
+                const targetY = this.gridY + dy;
+                
+                // Prüfen, ob die Zielposition frei ist
+                if (this.canMoveTo(targetX, targetY)) {
+                    this.targetX = targetX;
+                    this.targetY = targetY;
+                    this.isMoving = true;
+                }
+            }
+            
+            canMoveTo(x, y) {
+                // Prüfen, ob die Position innerhalb des Spielfelds liegt
+                if (!Utils.isInBounds(x, y)) return false;
+                
+                // Prüfen, ob eine Wand an der Position ist
+                if (this.game.isWall(x, y)) return false;
+                
+                return true;
+            }
+        }
+        
+        // Starte das Spiel, wenn alles geladen ist
+        document.addEventListener('DOMContentLoaded', function() {
+            const game = new Game();
+        });
+    </script>
+</body>
+</html> 

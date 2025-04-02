@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zone X - Canvas-Debug</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #333;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+        
+        /* Wichtig: Stellen Sie sicher, dass der Canvas sichtbar ist */
+        #game-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            background-color: #000022; /* Dunkelblauer Hintergrund */
+            border: 2px solid red; /* Deutlich sichtbarer Rahmen */
+        }
+        
+        #debug-panel {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 300px;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #0f0;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            overflow-y: auto;
+            z-index: 1000;
+            border-left: 2px solid #0f0;
+        }
+        
+        #controls {
+            position: fixed;
+            left: 10px;
+            top: 10px;
+            z-index: 1000;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border: 1px solid #0f0;
+        }
+        
+        button {
+            background-color: #222;
+            color: #0f0;
+            border: 1px solid #0f0;
+            margin: 5px;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        
+        /* UI-Container mit niedrigem z-index */
+        #ui-container {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            font-size: 14px;
+            visibility: hidden; /* Versteckt bis das Spiel startet */
+        }
+        
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 100;
+            color: white;
+            text-align: center;
+        }
+        
+        #start-screen h1 {
+            color: #0f0;
+            font-size: 32px;
+        }
+        
+        #start-button {
+            background-color: #0f0;
+            color: black;
+            border: none;
+            padding: 10px 20px;
+            font-size: 18px;
+            margin-top: 20px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <button id="reset-canvas">Canvas neu erstellen</button>
+        <button id="add-cube">Würfel hinzufügen</button>
+        <button id="test-render">Render erzwingen</button>
+        <button id="toggle-axes">Achsen umschalten</button>
+    </div>
+
+    <div id="ui-container">
+        <div>Leben: <span id="lives-count">5</span></div>
+        <div>Blocks: <span id="blocks-count">15</span></div>
+        <div>Plutonium: <span id="plutonium-count">5</span></div>
+        <div>Punkte: <span id="score-count">0</span></div>
+    </div>
+    
+    <canvas id="game-canvas"></canvas>
+    
+    <div id="start-screen">
+        <h1>Zone X - Canvas-Debug</h1>
+        <p>Diese Version analysiert und korrigiert Darstellungsprobleme</p>
+        <button id="start-button">Debug starten</button>
+    </div>
+    
+    <div id="debug-panel">
+        <h3>Canvas-Debug</h3>
+        <div id="debug-output"></div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    
+    <script>
+        // Debug-Ausgabe
+        function log(message, type = 'info') {
+            console.log('[DEBUG] ' + message);
+            
+            const output = document.getElementById('debug-output');
+            const logEntry = document.createElement('div');
+            
+            if (type === 'success') {
+                logEntry.style.color = '#0f0';
+                message = '✓ ' + message;
+            } else if (type === 'error') {
+                logEntry.style.color = '#f00';
+                message = '✗ ' + message;
+            } else if (type === 'warning') {
+                logEntry.style.color = '#ff0';
+                message = '⚠ ' + message;
+            }
+            
+            logEntry.textContent = message;
+            output.appendChild(logEntry);
+            
+            // Auto-Scroll
+            output.parentNode.scrollTop = output.parentNode.scrollHeight;
+        }
+        
+        // Debug-State
+        let scene, camera, renderer;
+        let debugCube, axesHelper;
+        let showAxes = false;
+        
+        // Analysiere Canvas-Eigenschaften
+        function inspectCanvas() {
+            log('Überprüfe Canvas-Element...', 'info');
+            
+            const canvas = document.getElementById('game-canvas');
+            if (!canvas) {
+                log('Kein Canvas-Element gefunden!', 'error');
+                return;
+            }
+            
+            log('Canvas gefunden (' + canvas.tagName + ')', 'success');
+            
+            // Canvas-Größe
+            const rect = canvas.getBoundingClientRect();
+            log(`Canvas-Größe: ${canvas.width}x${canvas.height} Pixel`, 'info');
+            log(`Canvas-Darstellung: ${rect.width}x${rect.height} Pixel`, 'info');
+            
+            // Canvas-Stil
+            const style = window.getComputedStyle(canvas);
+            log(`Sichtbarkeit: ${style.visibility}`, 'info');
+            log(`Display: ${style.display}`, 'info');
+            log(`Z-Index: ${style.zIndex}`, 'info');
+            log(`Position: ${style.position}`, 'info');
+            log(`Opacity: ${style.opacity}`, 'info');
+            
+            // WebGL-Unterstützung
+            try {
+                const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                if (!gl) {
+                    log('WebGL wird nicht unterstützt', 'error');
+                } else {
+                    log('WebGL wird unterstützt', 'success');
+                    
+                    // WebGL-Parameter
+                    log(`Max Vertex Attribs: ${gl.getParameter(gl.MAX_VERTEX_ATTRIBS)}`, 'info');
+                    log(`Max Texture Size: ${gl.getParameter(gl.MAX_TEXTURE_SIZE)}`, 'info');
+                    
+                    // Überprüfe, ob der Canvas sauber ist
+                    const pixels = new Uint8Array(4);
+                    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+                    log(`Canvas-Pixel bei (0,0): RGBA(${pixels[0]}, ${pixels[1]}, ${pixels[2]}, ${pixels[3]})`, 'info');
+                }
+            } catch (e) {
+                log('Fehler bei WebGL-Prüfung: ' + e.message, 'error');
+            }
+            
+            // Canvas korrekt initialisieren
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            log('Canvas für Rendering vorbereitet', 'success');
+        }
+        
+        // Erstelle neue Three.js-Szene
+        function setupThreeJS() {
+            log('Initialisiere Three.js...', 'info');
+            
+            // Canvas abrufen
+            const canvas = document.getElementById('game-canvas');
+            
+            // Neue Szene erstellen
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000044); // Dunkelblau
+            
+            // Kamera erstellen
+            const aspect = window.innerWidth / window.innerHeight;
+            camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
+            camera.position.z = 5;
+            
+            // Renderer erstellen
+            try {
+                renderer = new THREE.WebGLRenderer({ 
+                    canvas: canvas,
+                    antialias: true
+                });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(window.devicePixelRatio);
+                
+                log('Three.js-Renderer erfolgreich erstellt', 'success');
+            } catch (error) {
+                log('Fehler beim Erstellen des Three.js-Renderers: ' + error.message, 'error');
+                return false;
+            }
+            
+            // Beleuchtung hinzufügen
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(1, 1, 1);
+            scene.add(directionalLight);
+            
+            // Achsen hinzufügen
+            axesHelper = new THREE.AxesHelper(2);
+            axesHelper.visible = showAxes;
+            scene.add(axesHelper);
+            
+            // Würfel hinzufügen
+            addDebugCube();
+            
+            // Event-Listener
+            window.addEventListener('resize', handleResize);
+            
+            log('Three.js-Szene vollständig initialisiert', 'success');
+            
+            // Starte Rendering-Loop
+            animate();
+            
+            return true;
+        }
+        
+        // Event-Handler für Fenstergrößenänderung
+        function handleResize() {
+            if (!camera || !renderer) return;
+            
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            
+            log('Größenanpassung durchgeführt', 'success');
+        }
+        
+        // Fügt einen Debug-Würfel hinzu
+        function addDebugCube() {
+            const geometry = new THREE.BoxGeometry(1, 1, 1);
+            const material = new THREE.MeshLambertMaterial({ color: 0x00ff00 });
+            debugCube = new THREE.Mesh(geometry, material);
+            scene.add(debugCube);
+            
+            log('Debug-Würfel hinzugefügt', 'success');
+        }
+        
+        // Animations-Loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Würfel rotieren
+            if (debugCube) {
+                debugCube.rotation.x += 0.01;
+                debugCube.rotation.y += 0.01;
+            }
+            
+            // Rendern
+            if (renderer && scene && camera) {
+                renderer.render(scene, camera);
+            }
+        }
+        
+        // Canvas neu erstellen
+        function resetCanvas() {
+            log('Setze Canvas zurück...', 'info');
+            
+            // Alten Canvas entfernen
+            const oldCanvas = document.getElementById('game-canvas');
+            if (oldCanvas) {
+                oldCanvas.parentNode.removeChild(oldCanvas);
+            }
+            
+            // Neuen Canvas erstellen
+            const newCanvas = document.createElement('canvas');
+            newCanvas.id = 'game-canvas';
+            document.body.insertBefore(newCanvas, document.getElementById('debug-panel'));
+            
+            // Canvas inspizieren
+            inspectCanvas();
+            
+            // Three.js neu initialisieren
+            if (renderer) {
+                renderer.dispose();
+                renderer = null;
+            }
+            
+            setupThreeJS();
+            
+            log('Canvas zurückgesetzt und neu initialisiert', 'success');
+        }
+        
+        // Rendering erzwingen
+        function forceRender() {
+            log('Erzwinge Rendering...', 'info');
+            
+            if (renderer && scene && camera) {
+                renderer.render(scene, camera);
+                log('Rendering erzwungen', 'success');
+            } else {
+                log('Rendering nicht möglich (renderer, scene oder camera fehlt)', 'error');
+            }
+        }
+        
+        // Achsenanzeige umschalten
+        function toggleAxesHelper() {
+            if (axesHelper) {
+                showAxes = !showAxes;
+                axesHelper.visible = showAxes;
+                log('Achsenanzeige: ' + (showAxes ? 'AN' : 'AUS'), 'info');
+            }
+        }
+        
+        // Start des Debuggers
+        document.addEventListener('DOMContentLoaded', function() {
+            log('Canvas-Debugger geladen', 'info');
+            
+            // Event-Listener für Buttons
+            document.getElementById('reset-canvas').addEventListener('click', resetCanvas);
+            document.getElementById('add-cube').addEventListener('click', addDebugCube);
+            document.getElementById('test-render').addEventListener('click', forceRender);
+            document.getElementById('toggle-axes').addEventListener('click', toggleAxesHelper);
+            
+            // Start-Button
+            document.getElementById('start-button').addEventListener('click', function() {
+                document.getElementById('start-screen').style.display = 'none';
+                document.getElementById('ui-container').style.visibility = 'visible';
+                
+                inspectCanvas();
+                setupThreeJS();
+            });
+        });
+    </script>
+</body>
+</html> 

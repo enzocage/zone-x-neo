@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zone X - Fixed</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+</head>
+<body>
+    <div id="game-container">
+        <div id="ui-container">
+            <div id="lives">Leben: <span id="lives-count">5</span></div>
+            <div id="blocks">Blocks: <span id="blocks-count">15</span></div>
+            <div id="plutonium">Plutonium übrig: <span id="plutonium-count">5</span></div>
+            <div id="score">Punkte: <span id="score-count">0</span></div>
+            <div id="timer" class="hidden">Timer: <span id="timer-count">20</span></div>
+        </div>
+        <!-- Das Canvas-Element für das Spiel -->
+        <canvas id="game-canvas"></canvas>
+        <div id="start-screen">
+            <h1>Zone X</h1>
+            <p>Sammle alle Plutonium-Elemente und bringe sie zu den Tonnen. Erreiche dann den Ausgang.</p>
+            <p>Steuerung: W, A, S, D zum Bewegen, Leertaste zum Platzieren von Blocks.</p>
+            <button id="start-button">Spiel starten</button>
+            <div id="error-message" style="color: red; margin-top: 20px;"></div>
+            
+            <div class="debug-info">
+                <p>Debug-Informationen:</p>
+                <ul id="debug-list">
+                    <li>Auf Benutzereingabe warten...</li>
+                </ul>
+            </div>
+            
+            <div class="links" style="margin-top: 20px;">
+                <p>Alternativen:</p>
+                <ul>
+                    <li><a href="debug.html" style="color: yellow;">WebGL-Test ausführen</a></li>
+                    <li><a href="simple.html" style="color: lightgreen;">Einfache Version starten</a></li>
+                    <li><a href="reduced.html" style="color: lightblue;">Reduzierte Version starten</a></li>
+                    <li><a href="hybrid.html" style="color: pink;">Hybrid-Version starten</a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Inline-Definitionen von CONFIG und Utils für globale Verfügbarkeit -->
+    <script>
+        // Stelle sicher, dass diese Variablen global definiert werden
+        window.CONFIG = {
+            GRID_WIDTH: 64,
+            GRID_HEIGHT: 32,
+            TILE_SIZE: 1, // Auf 1 gesetzt für Kompatibilität
+            USE_FALLBACK_LEVEL: true,
+            CAMERA_FOV: 75,
+            CAMERA_NEAR: 0.1,
+            CAMERA_FAR: 1000,
+            CAMERA_POSITION: { x: 0, y: 0, z: 10 },
+            PLAYER_SPEED: 2,
+            PLAYER_INITIAL_LIVES: 5,
+            PLAYER_INITIAL_BLOCKS: 15,
+            ENEMY_SPEED: 1.2,
+            PLUTONIUM_COUNT: 5,
+            BARREL_COUNT: 3,
+            PLUTONIUM_TIMER: 20,
+            COLORS: {
+                PLAYER: 0x00ff00,
+                ENEMY: 0xff0000,
+                WALL: 0x888888,
+                PLUTONIUM: 0xffff00,
+                BARREL: 0x8B4513,
+                BLOCK: 0x00aaff,
+                EXIT: 0xff00ff,
+                START: 0x0000ff,
+                BACKGROUND: 0x000000
+            },
+            LEVEL_PATH: 'levels/',
+            FALLBACK_LEVEL: [
+                "████████████████████",
+                "█O                 █",
+                "█  ███████████    █",
+                "█  █         █    █",
+                "█  █  r      █    █",
+                "█  █    ████ █    █",
+                "█  █    █  █ █    █",
+                "█  ███  █  █X█    █",
+                "█    █  ████ █    █",
+                "█    █       █    █",
+                "█    █████████    █",
+                "█                 █",
+                "█ █████████████   █",
+                "█ █X            █ █",
+                "█ █        r    █ █",
+                "█ █  █████      █ █",
+                "█ █  █K  █      █ █",
+                "█ █  ████       █ █",
+                "█A█              █ █",
+                "████████████████████"
+            ],
+            SYMBOLS: {
+                WALL: '█',
+                PLAYER: 'O',
+                ENEMY_RIGHT: 'r',
+                ENEMY_LEFT: 'l',
+                BARREL: 'K',
+                PLUTONIUM: 'X',
+                EXIT: 'A',
+                EMPTY: ' '
+            }
+        };
+    
+        // Stellt Utils als globales Objekt zur Verfügung
+        window.Utils = {
+            gridToWorld: function(x, y) {
+                return {
+                    x: (x - CONFIG.GRID_WIDTH / 2) * CONFIG.TILE_SIZE,
+                    y: (CONFIG.GRID_HEIGHT / 2 - y) * CONFIG.TILE_SIZE
+                };
+            },
+            isInBounds: function(x, y) {
+                return x >= 0 && x < CONFIG.GRID_WIDTH && y >= 0 && y < CONFIG.GRID_HEIGHT;
+            },
+            loadCSV: function(url) {
+                return new Promise((resolve, reject) => {
+                    console.log('Versuche zu laden:', url);
+                    
+                    fetch(url)
+                        .then(response => {
+                            if (!response.ok) {
+                                console.error('HTTP Fehlerstatus:', response.status);
+                                throw new Error(`HTTP error! Status: ${response.status}`);
+                            }
+                            return response.text();
+                        })
+                        .then(csv => {
+                            if (!csv || csv.trim() === '') {
+                                console.error('CSV-Inhalt ist leer');
+                                throw new Error('CSV-Inhalt ist leer');
+                            }
+                            
+                            const rows = csv.split('\n');
+                            const grid = [];
+                            
+                            for (let y = 0; y < rows.length; y++) {
+                                if (rows[y].trim() === '') continue;
+                                
+                                const cells = rows[y].split(',');
+                                grid.push(cells);
+                            }
+                            
+                            if (grid.length === 0) {
+                                throw new Error('Grid ist leer nach dem Parsen');
+                            }
+                            
+                            resolve(grid);
+                        })
+                        .catch(error => {
+                            console.error('Fehler beim Laden der CSV-Datei:', error);
+                            reject(error);
+                        });
+                });
+            }
+        };
+    </script>
+    
+    <!-- Reguläre Skript-Einbindung, aber in der richtigen Reihenfolge -->
+    <script src="js/player.js"></script>
+    <script src="js/enemy.js"></script>
+    <script src="js/level.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/game.js"></script>
+    
+    <script>
+        // Debug-Funktion
+        function debugLog(message) {
+            console.log(message);
+            const list = document.getElementById('debug-list');
+            if (list) {
+                const item = document.createElement('li');
+                item.textContent = message;
+                list.appendChild(item);
+                
+                // Scroll zum letzten Element
+                list.scrollTop = list.scrollHeight;
+            }
+        }
+        
+        // Überprüfen, ob alles korrekt geladen wurde
+        window.addEventListener('load', function() {
+            debugLog("Seite geladen");
+            
+            debugLog("Prüfe Basis-Module:");
+            debugLog("CONFIG: " + (typeof CONFIG !== 'undefined' ? "OK ✓" : "FEHLT ✗"));
+            debugLog("Utils: " + (typeof Utils !== 'undefined' ? "OK ✓" : "FEHLT ✗"));
+            
+            debugLog("Prüfe Spiel-Module:");
+            debugLog("Level: " + (typeof Level !== 'undefined' ? "OK ✓" : "FEHLT ✗"));
+            debugLog("Player: " + (typeof Player !== 'undefined' ? "OK ✓" : "FEHLT ✗"));
+            debugLog("Enemy: " + (typeof Enemy !== 'undefined' ? "OK ✓" : "FEHLT ✗"));
+            debugLog("UI: " + (typeof UI !== 'undefined' ? "OK ✓" : "FEHLT ✗"));
+            debugLog("Game: " + (typeof Game !== 'undefined' ? "OK ✓" : "FEHLT ✗"));
+            
+            // Canvas-Element prüfen
+            const canvas = document.getElementById('game-canvas');
+            if (!canvas) {
+                debugLog("FEHLER: Canvas-Element nicht gefunden");
+                document.getElementById('error-message').textContent = 
+                    'Fehler: Canvas-Element konnte nicht gefunden werden.';
+                return;
+            }
+            
+            debugLog("Canvas-Element gefunden: " + (canvas.tagName === 'CANVAS' ? "OK ✓" : "FEHLER: " + canvas.tagName));
+            
+            // Three.js prüfen
+            if (typeof THREE === 'undefined') {
+                document.getElementById('error-message').textContent = 
+                    'Fehler: Three.js konnte nicht geladen werden. Bitte überprüfen Sie Ihre Internetverbindung.';
+                debugLog("ERROR: Three.js nicht geladen");
+                return;
+            }
+            
+            debugLog("Three.js ist geladen (Version " + THREE.REVISION + ")");
+            
+            // WebGL-Unterstützung testen
+            try {
+                const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                if (!gl) {
+                    debugLog("WARNUNG: WebGL nicht unterstützt");
+                    document.getElementById('error-message').textContent = 
+                        'Warnung: WebGL wird von Ihrem Browser nicht unterstützt. Das Spiel könnte nicht funktionieren.';
+                } else {
+                    debugLog("WebGL wird unterstützt");
+                    
+                    // Versuche Renderer-Informationen zu bekommen
+                    try {
+                        const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                        if (debugInfo) {
+                            const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+                            const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                            debugLog(`GPU: ${vendor} / ${renderer}`);
+                        }
+                    } catch (e) {
+                        debugLog("GPU-Info nicht verfügbar: " + e.message);
+                    }
+                }
+            } catch (e) {
+                debugLog("Fehler beim WebGL-Test: " + e.message);
+            }
+            
+            // Start-Button-Event-Listener
+            document.getElementById('start-button').addEventListener('click', function() {
+                debugLog("Start-Button geklickt");
+                
+                // Direktes Fallback-Level aktivieren
+                CONFIG.USE_FALLBACK_LEVEL = true;
+                
+                document.getElementById('start-screen').style.display = 'none';
+                // Starte das Spiel mit einer kleinen Verzögerung
+                setTimeout(function() {
+                    try {
+                        debugLog("Starte Spiel...");
+                        window.game = new Game();
+                    } catch (error) {
+                        console.error('Fehler beim Starten des Spiels:', error);
+                        debugLog("FEHLER beim Spielstart: " + error.message);
+                        document.getElementById('start-screen').style.display = 'flex';
+                        document.getElementById('error-message').textContent = 
+                            'Fehler beim Starten des Spiels: ' + error.message;
+                    }
+                }, 100);
+            });
+        });
+    </script>
+</body>
+</html> 

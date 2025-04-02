@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zone X</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container">
+        <div id="ui-container">
+            <div id="lives">Leben: <span id="lives-count">5</span></div>
+            <div id="blocks">Blocks: <span id="blocks-count">15</span></div>
+            <div id="plutonium">Plutonium übrig: <span id="plutonium-count">5</span></div>
+            <div id="score">Punkte: <span id="score-count">0</span></div>
+            <div id="timer" class="hidden">Timer: <span id="timer-count">20</span></div>
+        </div>
+        <canvas id="game-canvas"></canvas>
+        <div id="start-screen">
+            <h1>Zone X</h1>
+            <p>Sammle alle Plutonium-Elemente und bringe sie zu den Tonnen. Erreiche dann den Ausgang.</p>
+            <p>Steuerung: W, A, S, D zum Bewegen, Leertaste zum Platzieren von Blocks.</p>
+            <button id="start-button">Spiel starten</button>
+            <div id="error-message" style="color: red; margin-top: 20px;"></div>
+        </div>
+    </div>
+    
+    <!-- Three.js laden -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    
+    <!-- Rendering-Fix -->
+    <script>
+        // Stelle sicher, dass Game.render und Game.animate richtig funktionieren
+        window.addEventListener('load', function() {
+            // Warten, bis die Game-Klasse definiert ist
+            const waitForGame = setInterval(function() {
+                if (typeof Game !== 'undefined') {
+                    clearInterval(waitForGame);
+                    
+                    // Original-Funktionen speichern
+                    const originalAnimate = Game.prototype.animate;
+                    const originalRender = Game.prototype.render;
+                    
+                    // Animationsfunktion patchen
+                    Game.prototype.animate = function(time) {
+                        // Original-Funktion aufrufen
+                        originalAnimate.call(this, time);
+                        
+                        // Immer rendern, um sicherzustellen, dass die Szene angezeigt wird
+                        if (this.renderer && this.scene && this.camera) {
+                            this.renderer.render(this.scene, this.camera);
+                        }
+                    };
+                    
+                    // Renderfunktion patchen
+                    Game.prototype.render = function() {
+                        if (this.renderer && this.scene && this.camera) {
+                            this.renderer.render(this.scene, this.camera);
+                        }
+                    };
+                    
+                    console.log("Rendering-Fix angewendet");
+                }
+            }, 100);
+        });
+        
+        // Zusätzliche Absicherung: Globale Rendering-Schleife
+        (function() {
+            let renderLoop = null;
+            
+            function ensureRendering() {
+                if (window.game && window.game.renderer && window.game.scene && window.game.camera) {
+                    window.game.renderer.render(window.game.scene, window.game.camera);
+                }
+            }
+            
+            function startBackupRenderLoop() {
+                renderLoop = setInterval(ensureRendering, 100); // 10 FPS Backup-Rendering
+            }
+            
+            // Starte Backup-Rendering nach 2 Sekunden
+            setTimeout(startBackupRenderLoop, 2000);
+        })();
+    </script>
+    
+    <!-- Konfiguration -->
+    <script src="js/config.js"></script>
+    
+    <!-- Utilities -->
+    <script src="js/utils.js"></script>
+    
+    <!-- Spielkomponenten -->
+    <script src="js/player.js"></script>
+    <script src="js/enemy.js"></script>
+    <script src="js/level.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/game.js"></script>
+    
+    <!-- Spielstart -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('start-button').addEventListener('click', function() {
+                document.getElementById('start-screen').style.display = 'none';
+                
+                try {
+                    window.game = new Game();
+                } catch (error) {
+                    console.error("Fehler beim Starten des Spiels:", error);
+                    document.getElementById('error-message').textContent = 
+                        "Fehler beim Starten des Spiels: " + error.message;
+                    document.getElementById('start-screen').style.display = 'flex';
+                }
+            });
+        });
+    </script>
+</body>
+</html> 

@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zone X - Finale Version</title>
+    
+    <style>
+        /* Direkt eingebundenes CSS, um externe Abhängigkeiten zu eliminieren */
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+        
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        #game-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+            background-color: #000022;
+        }
+        
+        #ui-container {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        
+        #ui-container div {
+            margin-bottom: 5px;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.9);
+            color: white;
+            z-index: 100;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        #start-screen h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            color: #00ff00;
+        }
+        
+        #start-screen p {
+            font-size: 18px;
+            margin-bottom: 15px;
+            max-width: 600px;
+        }
+        
+        #start-button {
+            padding: 15px 30px;
+            font-size: 20px;
+            background-color: #00aa00;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: background-color 0.3s;
+        }
+        
+        #start-button:hover {
+            background-color: #00cc00;
+        }
+        
+        #debug-panel {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 250px;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #0f0;
+            padding: 10px;
+            font-family: monospace;
+            overflow-y: auto;
+            z-index: 1000;
+            border-left: 1px solid #0f0;
+            font-size: 12px;
+        }
+        
+        #fps-counter {
+            position: fixed;
+            top: 10px;
+            right: 270px;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: #0f0;
+            padding: 5px;
+            font-family: monospace;
+            z-index: 999;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="ui-container">
+            <div id="lives">Leben: <span id="lives-count">5</span></div>
+            <div id="blocks">Blocks: <span id="blocks-count">15</span></div>
+            <div id="plutonium">Plutonium übrig: <span id="plutonium-count">5</span></div>
+            <div id="score">Punkte: <span id="score-count">0</span></div>
+            <div id="timer" class="hidden">Timer: <span id="timer-count">20</span></div>
+        </div>
+        
+        <canvas id="game-canvas"></canvas>
+        
+        <div id="start-screen">
+            <h1>Zone X</h1>
+            <p>Sammle alle Plutonium-Elemente und bringe sie zu den Tonnen. Erreiche dann den Ausgang.</p>
+            <p>Steuerung: W, A, S, D zum Bewegen, Leertaste zum Platzieren von Blocks.</p>
+            <button id="start-button">Spiel starten</button>
+            <div id="error-message" style="color: red; margin-top: 20px;"></div>
+        </div>
+    </div>
+    
+    <div id="debug-panel">
+        <h3>Debug-Informationen</h3>
+        <div id="debug-output"></div>
+    </div>
+    
+    <div id="fps-counter">FPS: 0</div>
+    
+    <!-- Three.js laden -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    
+    <!-- Rendering-Fix -->
+    <script>
+        // Debug-Logging
+        function debugLog(message, type = 'info') {
+            console.log('[DEBUG] ' + message);
+            
+            const debugOutput = document.getElementById('debug-output');
+            if (!debugOutput) return;
+            
+            const entry = document.createElement('div');
+            entry.style.borderBottom = '1px dotted #333';
+            entry.style.paddingBottom = '3px';
+            entry.style.marginBottom = '3px';
+            
+            if (type === 'success') {
+                entry.style.color = '#0f0';
+                message = '✓ ' + message;
+            } else if (type === 'error') {
+                entry.style.color = '#f00';
+                message = '✗ ' + message;
+            } else if (type === 'warning') {
+                entry.style.color = '#ff0';
+                message = '⚠ ' + message;
+            }
+            
+            entry.textContent = message;
+            debugOutput.appendChild(entry);
+            
+            // Auto-Scroll
+            debugOutput.scrollTop = debugOutput.scrollHeight;
+        }
+        
+        // FPS-Zähler
+        let frameCount = 0;
+        let lastTime = 0;
+        
+        function updateFPS(time) {
+            frameCount++;
+            
+            if (time - lastTime >= 1000) {
+                const fps = Math.round((frameCount * 1000) / (time - lastTime));
+                document.getElementById('fps-counter').textContent = `FPS: ${fps}`;
+                frameCount = 0;
+                lastTime = time;
+            }
+        }
+        
+        // Canvas-Vorbereitung
+        function prepareCanvas() {
+            debugLog('Prüfe Canvas...', 'info');
+            
+            const canvas = document.getElementById('game-canvas');
+            if (!canvas) {
+                debugLog('FEHLER: Canvas nicht gefunden!', 'error');
+                return false;
+            }
+            
+            // Setze initiale Größe
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            // Prüfe, ob WebGL unterstützt wird
+            try {
+                const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                if (!gl) {
+                    debugLog('WARNUNG: WebGL wird nicht unterstützt!', 'warning');
+                } else {
+                    debugLog('WebGL wird unterstützt', 'success');
+                }
+            } catch (e) {
+                debugLog('FEHLER bei WebGL-Prüfung: ' + e.message, 'error');
+            }
+            
+            debugLog('Canvas vorbereitet', 'success');
+            return true;
+        }
+        
+        // Patch für Game-Klasse
+        function patchGameClass() {
+            debugLog('Patche Game-Klasse...', 'info');
+            
+            // Force-Rendering-Funktion global verfügbar machen
+            window.forceRender = function() {
+                if (window.game && window.game.renderer && window.game.scene && window.game.camera) {
+                    window.game.renderer.render(window.game.scene, window.game.camera);
+                    debugLog('Force-Render ausgeführt', 'success');
+                }
+            };
+            
+            // Warten, bis Game-Klasse verfügbar ist
+            let attempts = 0;
+            const maxAttempts = 20;
+            
+            function tryPatch() {
+                attempts++;
+                
+                if (typeof Game !== 'undefined') {
+                    // Original-Funktionen speichern
+                    const originalAnimate = Game.prototype.animate;
+                    const originalRender = Game.prototype.render;
+                    
+                    // Animationsfunktion patchen
+                    Game.prototype.animate = function(time) {
+                        // FPS aktualisieren
+                        updateFPS(time);
+                        
+                        // Original-Funktion aufrufen
+                        originalAnimate.call(this, time);
+                        
+                        // Explizites Rendering erzwingen
+                        if (this.renderer && this.scene && this.camera) {
+                            this.renderer.render(this.scene, this.camera);
+                        }
+                    };
+                    
+                    // Renderfunktion patchen
+                    Game.prototype.render = function() {
+                        if (this.renderer && this.scene && this.camera) {
+                            this.renderer.render(this.scene, this.camera);
+                        } else {
+                            const missing = [];
+                            if (!this.renderer) missing.push('renderer');
+                            if (!this.scene) missing.push('scene');
+                            if (!this.camera) missing.push('camera');
+                            
+                            debugLog('Rendering nicht möglich: ' + missing.join(', ') + ' fehlt', 'error');
+                        }
+                    };
+                    
+                    debugLog('Game-Klasse erfolgreich gepatcht', 'success');
+                    return true;
+                } else if (attempts < maxAttempts) {
+                    debugLog('Game-Klasse noch nicht verfügbar (Versuch ' + attempts + '/' + maxAttempts + ')', 'info');
+                    setTimeout(tryPatch, 250);
+                    return false;
+                } else {
+                    debugLog('Konnte Game-Klasse nach ' + maxAttempts + ' Versuchen nicht patchen', 'error');
+                    return false;
+                }
+            }
+            
+            return tryPatch();
+        }
+        
+        // Nofall-Rendering-Loop
+        function setupBackupRendering() {
+            debugLog('Starte Backup-Rendering-Loop...', 'info');
+            
+            let renderLoopActive = true;
+            let lastRendered = 0;
+            
+            function backupRenderLoop(time) {
+                if (!renderLoopActive) return;
+                
+                requestAnimationFrame(backupRenderLoop);
+                
+                // Setze max. 10 FPS für Backup-Rendering
+                if (time - lastRendered < 100) return;
+                lastRendered = time;
+                
+                // Prüfe, ob Spiel existiert und rendere
+                if (window.game && window.game.renderer && window.game.scene && window.game.camera) {
+                    window.game.renderer.render(window.game.scene, window.game.camera);
+                    updateFPS(time);
+                }
+            }
+            
+            // Starte Backup-Loop
+            requestAnimationFrame(backupRenderLoop);
+            
+            debugLog('Backup-Rendering-Loop gestartet', 'success');
+        }
+        
+        // Initialisierung
+        document.addEventListener('DOMContentLoaded', function() {
+            debugLog('DOM geladen', 'success');
+            
+            // Starte Patch-Prozess
+            prepareCanvas();
+            patchGameClass();
+            
+            // Backup-Rendering nach 1 Sekunde starten
+            setTimeout(setupBackupRendering, 1000);
+            
+            // Event-Listener für Start-Button
+            document.getElementById('start-button').addEventListener('click', function() {
+                document.getElementById('start-screen').style.display = 'none';
+                
+                try {
+                    debugLog('Starte Spiel...', 'info');
+                    window.game = new Game();
+                    
+                    // Forciere erstes Rendering nach 500ms
+                    setTimeout(function() {
+                        if (window.game) {
+                            window.forceRender();
+                        }
+                    }, 500);
+                } catch (error) {
+                    debugLog('FEHLER beim Spielstart: ' + error.message, 'error');
+                    console.error(error);
+                    document.getElementById('error-message').textContent = 'Fehler beim Spielstart: ' + error.message;
+                    document.getElementById('start-screen').style.display = 'flex';
+                }
+            });
+        });
+    </script>
+    
+    <!-- Konfiguration -->
+    <script src="js/config.js"></script>
+    
+    <!-- Utilities -->
+    <script src="js/utils.js"></script>
+    
+    <!-- Spielkomponenten -->
+    <script src="js/player.js"></script>
+    <script src="js/enemy.js"></script>
+    <script src="js/level.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/game.js"></script>
+</body>
+</html> 
