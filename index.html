@@ -99,17 +99,6 @@
             <div id="timer" class="hidden">Timer: <span id="timer-count">20</span></div>
         </div>
         
-        <!-- Audio Debug Panel -->
-        <div id="audio-debug" style="position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,0.7); 
-            padding: 10px; border-radius: 5px; z-index: 1000; color: white; font-size: 12px;">
-            <div>Audio-Status: <span id="audio-status">Initialisiere...</span></div>
-            <div>Context: <span id="audio-context-state">-</span></div>
-            <div>Letzter Sound: <span id="last-sound-played">-</span></div>
-            <div>Lautstärke: <span id="volume-level">50%</span></div>
-            <button id="test-sound" style="margin-top: 5px; background: #00aa00; color: white; border: none; 
-                padding: 5px; border-radius: 3px; cursor: pointer;">Ton testen</button>
-        </div>
-        
         <div id="start-screen">
             <h1>Zone X</h1>
             <p>Rasterbasiertes 2D-Spiel mit 64x32 Grid und Level-Progression.</p>
@@ -1483,9 +1472,9 @@
             if (plutoniumCollected) {
                 ctx.fillStyle = COLORS.PLUTONIUM;
                 
-                // 5-strahliger Mini-Stern über dem Spieler
+                // 5-strahliger Mini-Stern im Zentrum des Spielers
                 const centerX = offsetX + player.visualX * CELL_SIZE * zoomLevel + CELL_SIZE * zoomLevel / 2;
-                const centerY = offsetY + player.visualY * CELL_SIZE * zoomLevel - CELL_SIZE * zoomLevel / 4;
+                const centerY = offsetY + player.visualY * CELL_SIZE * zoomLevel + CELL_SIZE * zoomLevel / 2;
                 const outerRadius = CELL_SIZE * zoomLevel / 6;
                 const innerRadius = CELL_SIZE * zoomLevel / 12;
                 
