@@ -561,8 +561,12 @@
             return walls.some(wall => wall.x === x && wall.y === y);
         }
         
-        function isEnemy(x, y) {
-            return enemies.some(enemy => enemy.x === x && enemy.y === y);
+        function isEnemy(x, y, excludeEnemy = null) {
+            return enemies.some(enemy => 
+                enemy !== excludeEnemy && 
+                Math.floor(enemy.x) === Math.floor(x) && 
+                Math.floor(enemy.y) === Math.floor(y)
+            );
         }
         
         function isPlutonium(x, y) {
@@ -764,7 +768,7 @@
             for (let enemy of enemies) {
                 // Gleitende Bewegung zur Ziel-Grid-Position
                 if (Math.abs(enemy.visualX - enemy.x) < 0.05 && 
-                    Math.abs(enemy.visualY - enemy.y) < 0.5) {
+                    Math.abs(enemy.visualY - enemy.y) < 0.05) {
                     
                     // Mit zufälliger Wahrscheinlichkeit Richtung ändern
                     if (Math.random() < 0.02) {
@@ -785,7 +789,7 @@
                     
                     // Kollisionsprüfung
                     if (isWall(enemy.x, enemy.y) || isBarrel(enemy.x, enemy.y) || 
-                        isBlock(enemy.x, enemy.y) || isEnemy(enemy.x, enemy.y)) {
+                        isBlock(enemy.x, enemy.y) || isEnemy(enemy.x, enemy.y, enemy)) {
                         // Zurücksetzen und Richtung ändern
                         enemy.x = oldX;
                         enemy.y = oldY;
