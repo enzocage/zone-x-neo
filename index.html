@@ -196,6 +196,7 @@
         class AudioManager {
             constructor() {
                 this.sounds = {};
+                this.audioFiles = {}; // Für externe Audio-Dateien
                 this.soundEnabled = true;
                 this.audioContext = null;
                 this.masterGain = null;
@@ -434,6 +435,68 @@
                 if (this.masterGain) {
                     this.masterGain.gain.value = volume;
                     this.volumeLevel.textContent = Math.round(volume * 100) + "%";
+                }
+            }
+            
+            // Methode zum Laden und Abspielen externer Audio-Dateien
+            playAudioFile(filePath) {
+                if (!this.soundEnabled) {
+                    this.updateAudioStatus("Sound deaktiviert: " + filePath);
+                    return false;
+                }
+                
+                try {
+                    this.updateAudioStatus("Versuche Audio-Datei abzuspielen: " + filePath);
+                    
+                    // Prüfen, ob die Datei bereits geladen wurde
+                    if (!this.audioFiles[filePath]) {
+                        const audio = new Audio(filePath);
+                        this.audioFiles[filePath] = audio;
+                        
+                        // Volume setzen entsprechend der Lautstärkeeinstellung
+                        if (this.masterGain) {
+                            audio.volume = this.masterGain.gain.value;
+                        } else {
+                            audio.volume = 0.5; // Standard: 50%
+                        }
+                        
+                        console.log(`Audio-Datei geladen: ${filePath}`);
+                    }
+                    
+                    const audio = this.audioFiles[filePath];
+                    
+                    // Auf Anfang zurücksetzen und abspielen
+                    audio.currentTime = 0;
+                    const playPromise = audio.play();
+                    
+                    if (playPromise !== undefined) {
+                        playPromise.then(() => {
+                            console.log(`Audio-Datei wird abgespielt: ${filePath}`);
+                            this.updateLastSound(filePath);
+                            this.updateAudioStatus("Spielt Audio-Datei: " + filePath);
+                        }).catch(error => {
+                            console.error(`Fehler beim Abspielen der Audio-Datei ${filePath}:`, error);
+                            this.updateAudioStatus("Fehler beim Abspielen: " + error.message);
+                            
+                            // Fallback bei Autoplay-Sperre
+                            if (error.name === 'NotAllowedError') {
+                                console.warn("Autoplay wurde vom Browser blockiert. Versuche nach Benutzerinteraktion erneut.");
+                                
+                                const unlockAudio = () => {
+                                    this.playAudioFile(filePath);
+                                    document.removeEventListener('click', unlockAudio);
+                                };
+                                
+                                document.addEventListener('click', unlockAudio, { once: true });
+                            }
+                        });
+                    }
+                    
+                    return true;
+                } catch (error) {
+                    console.error(`Fehler beim Laden/Abspielen der Audio-Datei ${filePath}:`, error);
+                    this.updateAudioStatus("Fehler: " + error.message);
+                    return false;
                 }
             }
         }
@@ -1085,6 +1148,13 @@
                 plutoniumTimer = 20;
                 updateUI();
                 audioManager.playSound('collectPlutonium');
+                
+                // Zusätzlich zum synthetischen Sound auch die WAV-Datei abspielen
+                try {
+                    audioManager.playAudioFile('sound/plutonium.wav');
+                } catch (error) {
+                    console.error("Fehler beim Abspielen von sound/plutonium.wav:", error);
+                }
             }
             
             // Plutonium in Tonne abliefern
@@ -1578,9 +1648,23 @@
             document.getElementById('start-screen').classList.add('hidden');
             
             try {
-                audioManager.playSound('gameStart');
+                // Statt des synthetisierten Tons die WAV-Datei abspielen
+                console.log("Spiele Intro-Sound aus Datei...");
+                if (audioManager.playAudioFile('sounds/intro.wav')) {
+                    console.log("Intro-Sound wird abgespielt");
+                } else {
+                    // Fallback auf den synthetisierten Ton
+                    console.log("Fallback auf synthetisierten Sound");
+                    audioManager.playSound('gameStart');
+                }
             } catch (e) {
                 console.error("Fehler beim Abspielen des Startsounds:", e);
+                // Versuche den synthetisierten Ton als Fallback
+                try {
+                    audioManager.playSound('gameStart');
+                } catch (e2) {
+                    console.error("Auch Fallback fehlgeschlagen:", e2);
+                }
             }
             
             init();
