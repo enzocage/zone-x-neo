@@ -725,8 +725,10 @@
                 if (keys.left) newX--;
                 if (keys.right) newX++;
                 
-                // Kollisionsprüfung
-                if (!isWall(newX, newY) && !isBarrel(newX, newY) && !isBlock(newX, newY)) {
+                // Kollisionsprüfung - Erlaube Betreten von Tonnen, wenn Plutonium getragen wird
+                if (!isWall(newX, newY) && 
+                    (!isBarrel(newX, newY) || plutoniumCollected) && 
+                    !isBlock(newX, newY)) {
                     player.x = newX;
                     player.y = newY;
                 }
