@@ -510,6 +510,75 @@
         // Audio-Manager initialisieren
         const audioManager = new AudioManager();
         
+        // Sound-Toggle-Button-Handler hinzufügen
+        document.getElementById('sound-toggle').addEventListener('click', function() {
+            const soundEnabled = audioManager.toggleSound();
+            this.textContent = soundEnabled ? 'An' : 'Aus';
+            this.style.backgroundColor = soundEnabled ? '#00aa00' : '#aa0000';
+        });
+        
+        // Handler für Wechsel zwischen Level-Typen
+        document.getElementById('standard-level-btn').addEventListener('click', function() {
+            isRandomLevel = false;
+            isJourneyMode = false;
+            document.getElementById('standard-level-options').style.display = 'block';
+            document.getElementById('random-level-options').style.display = 'none';
+            document.getElementById('journey-level-options').style.display = 'none';
+            document.getElementById('standard-level-btn').style.backgroundColor = '#00aa00';
+            document.getElementById('random-level-btn').style.backgroundColor = '#555';
+            document.getElementById('journey-level-btn').style.backgroundColor = '#555';
+        });
+        
+        document.getElementById('random-level-btn').addEventListener('click', function() {
+            isRandomLevel = true;
+            isJourneyMode = false;
+            document.getElementById('standard-level-options').style.display = 'none';
+            document.getElementById('random-level-options').style.display = 'block';
+            document.getElementById('journey-level-options').style.display = 'none';
+            document.getElementById('standard-level-btn').style.backgroundColor = '#555';
+            document.getElementById('random-level-btn').style.backgroundColor = '#00aa00';
+            document.getElementById('journey-level-btn').style.backgroundColor = '#555';
+        });
+        
+        document.getElementById('journey-level-btn').addEventListener('click', function() {
+            isRandomLevel = true;
+            isJourneyMode = true;
+            document.getElementById('standard-level-options').style.display = 'none';
+            document.getElementById('random-level-options').style.display = 'none';
+            document.getElementById('journey-level-options').style.display = 'block';
+            document.getElementById('standard-level-btn').style.backgroundColor = '#555';
+            document.getElementById('random-level-btn').style.backgroundColor = '#555';
+            document.getElementById('journey-level-btn').style.backgroundColor = '#00aa00';
+        });
+        
+        // Slider und Input-Feld synchronisieren
+        function setupSliderInputSync(sliderId, inputId) {
+            const slider = document.getElementById(sliderId);
+            const input = document.getElementById(inputId);
+            
+            if (!slider || !input) return; // Falls Elemente nicht existieren
+            
+            slider.addEventListener('input', function() {
+                input.value = slider.value;
+            });
+            
+            input.addEventListener('input', function() {
+                if (input.value < input.min) input.value = input.min;
+                if (input.value > input.max) input.value = input.max;
+                slider.value = input.value;
+            });
+        }
+        
+        // Synchronisierung für alle Slider einrichten
+        window.addEventListener('DOMContentLoaded', function() {
+            setupSliderInputSync('wall-count-slider', 'wall-count');
+            setupSliderInputSync('enemy-count-slider', 'enemy-count');
+            setupSliderInputSync('block-count-slider', 'block-count');
+            setupSliderInputSync('barrel-count-slider', 'barrel-count');
+            setupSliderInputSync('plutonium-count-slider', 'plutonium-count');
+            setupSliderInputSync('journey-max-level-slider', 'journey-max-level');
+        });
+        
         // Spielzustand
         let currentLevel = 1;
         let maxLevel = 11; // Laut readme.md gibt es 11 CSV-Dateien
