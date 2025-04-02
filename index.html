@@ -642,13 +642,28 @@
             // Level-spezifische Einstellungen
             resetGame();
             
-            // Wenn Zufallslevel gewählt wurde, generiere ein Zufallslevel
+            // Wenn Zufallslevel gewählt wurde, prüfe, ob ein gespeichertes Zufallslevel ausgewählt wurde
             if (isRandomLevel) {
+                const savedLevelSelect = document.getElementById('saved-random-level-select');
+                
+                if (savedLevelSelect && savedLevelSelect.value) {
+                    // Ein gespeichertes Zufallslevel wurde ausgewählt
+                    console.log(`Gespeichertes Zufallslevel "${savedLevelSelect.value}" wird geladen...`);
+                    if (await loadLevelFromFile(`levels/${savedLevelSelect.value}`)) {
+                        console.log("Gespeichertes Zufallslevel erfolgreich geladen");
+                        return;
+                    } else {
+                        console.error(`Fehler beim Laden des gespeicherten Zufallslevels "${savedLevelSelect.value}"`);
+                        // Fallback: Generiere ein neues Zufallslevel
+                    }
+                }
+                
+                // Kein gespeichertes Level ausgewählt oder Laden fehlgeschlagen, generiere ein neues
                 console.log("Zufallslevel wird generiert statt CSV-Level zu laden");
                 generateRandomAccessibleLevel();
                 console.log("Prüfe generierte Arrays: Wände:", walls.length, "Gegner:", enemies.length, 
-                           "Plutonium:", plutonium.length, "Tonnen:", barrels.length, 
-                           "Aufsammelbare Blöcke:", collectibleBlocks.length);
+                        "Plutonium:", plutonium.length, "Tonnen:", barrels.length, 
+                        "Aufsammelbare Blöcke:", collectibleBlocks.length);
                 return;
             }
             
@@ -713,88 +728,75 @@
         
         // CSV-Level parsen und Spielelemente erstellen
         function parseCSVLevel(csvText) {
-            resetGame();
-            
-            // CSV in Zeilen aufteilen
-            const rows = csvText.trim().split('\n');
-            const grid = rows.map(row => row.split(','));
-            
-            // Spielfeld-Größe anpassen
-            GRID_WIDTH = grid[0].length;
-            GRID_HEIGHT = grid.length;
-            
-            // Spielelemente platzieren
-            for (let y = 0; y < grid.length; y++) {
-                for (let x = 0; x < grid[y].length; x++) {
-                    const cell = grid[y][x];
+            try {
+                console.log("Parse CSV-Level...");
+                
+                // Arrays für die Elemente des Levels zurücksetzen
+                walls = [];
+                enemies = [];
+                collectibleBlocks = [];
+                barrels = [];
+                plutonium = [];
+                
+                // Teile den CSV-Text in Zeilen
+                const rows = csvText.trim().split('\n');
+                const gridHeight = rows.length;
+                const gridWidth = rows[0].split(',').length;
+                
+                console.log(`CSV-Grid: ${gridWidth}x${gridHeight}`);
+                
+                // Platziere den Spieler und Ausgang standardmäßig
+                player = { x: 1, y: 1 };
+                exit = { x: gridWidth - 2, y: gridHeight - 2 };
+                
+                // Parse jede Zeile des CSV
+                for (let y = 0; y < gridHeight; y++) {
+                    const cells = rows[y].split(',');
                     
-                    if (cell in LEVEL_SYMBOLS) {
-                        const type = LEVEL_SYMBOLS[cell];
+                    for (let x = 0; x < cells.length; x++) {
+                        const cell = parseInt(cells[x]);
                         
-                        switch (type) {
-                            case 'wall':
+                        // Parse die Zelle basierend auf dem Wert
+                        switch (cell) {
+                            case 1: // Wand
                                 walls.push({ x, y });
                                 break;
-                            case 'start':
-                                player.x = x;
-                                player.y = y;
-                                player.visualX = x;
-                                player.visualY = y;
-                                player.lastX = x;
-                                player.lastY = y;
-                                break;
-                            case 'exit':
+                            case 2: // Ausgang
                                 exit = { x, y };
                                 break;
-                            case 'barrel':
-                                barrels.push({ x, y });
+                            case 3: // Spieler
+                                player = { x, y };
                                 break;
-                            case 'plutonium':
-                                plutonium.push({ x, y });
+                            case 4: // Gegner
+                                enemies.push({ x, y, direction: Math.floor(Math.random() * 4) });
                                 break;
-                            case 'block':
+                            case 5: // Block
                                 collectibleBlocks.push({ x, y });
                                 break;
-                            case 'enemy':
-                                enemies.push({
-                                    x, y,
-                                    visualX: x,
-                                    visualY: y,
-                                    direction: Math.floor(Math.random() * 4),
-                                    speed: 1 + Math.random() * 0.5
-                                });
+                            case 6: // Tonne
+                                barrels.push({ x, y });
                                 break;
-                            case 'bonus':
-                                // Bonus-Leben (wird beim Berühren aufgesammelt)
-                                // Implementation später
+                            case 7: // Plutonium
+                                plutonium.push({ x, y });
                                 break;
                         }
                     }
                 }
-            }
-            
-            // Sicherstellen, dass es genug Plutonium und Tonnen gibt
-            if (plutonium.length < 5) {
-                const missingPlutonium = 5 - plutonium.length;
-                console.log(`Zu wenig Plutonium im Level, füge ${missingPlutonium} hinzu`);
-                for (let i = 0; i < missingPlutonium; i++) {
-                    addRandomElement('plutonium');
-                }
-            }
-            
-            if (barrels.length < 3) {
-                const missingBarrels = 3 - barrels.length;
-                console.log(`Zu wenig Tonnen im Level, füge ${missingBarrels} hinzu`);
-                for (let i = 0; i < missingBarrels; i++) {
-                    addRandomElement('barrel');
-                }
-            }
-            
-            // Wenn das Level keine Feinde hat, füge welche hinzu
-            if (enemies.length === 0) {
-                const enemyCount = Math.floor(7 * Math.pow(1.3, currentLevel - 1));
-                console.log(`Keine Feinde im Level, füge ${enemyCount} hinzu`);
-                createEnemies(enemyCount);
+                
+                // Anzahl der verfügbaren Blöcke setzen
+                blocksCount = 15;
+                
+                console.log("Level aus CSV erfolgreich geladen:");
+                console.log(`- Wände: ${walls.length}`);
+                console.log(`- Gegner: ${enemies.length}`);
+                console.log(`- Blöcke: ${collectibleBlocks.length}`);
+                console.log(`- Tonnen: ${barrels.length}`);
+                console.log(`- Plutonium: ${plutonium.length}`);
+                
+                return true;
+            } catch (error) {
+                console.error("Fehler beim Parsen des CSV-Levels:", error);
+                return false;
             }
         }
         
@@ -1685,6 +1687,9 @@
             document.getElementById('random-level-options').style.display = 'block';
             document.getElementById('standard-level-btn').style.backgroundColor = '#555';
             document.getElementById('random-level-btn').style.backgroundColor = '#00aa00';
+            
+            // Lade die Liste der gespeicherten Zufallslevels
+            updateSavedRandomLevels();
         });
         
         // Slider und Input-Feld synchronisieren
@@ -1714,136 +1719,223 @@
         
         // Zufälliges Level generieren mit sichergestellter Zugänglichkeit
         function generateRandomAccessibleLevel() {
-            console.log("Generiere zufälliges Level mit garantierter Zugänglichkeit...");
+            console.log("Generiere zufälliges Level");
             
-            // Spielfeldgröße auf Standard setzen
-            GRID_WIDTH = 64;
-            GRID_HEIGHT = 32;
+            // Größe des Spielfeldes (Anzahl der Felder)
+            const gridWidth = 20;
+            const gridHeight = 15;
             
-            // Werte aus den Einstellungen holen
-            const wallCount = parseInt(document.getElementById("wall-count").value) || 550;
-            const enemyCount = parseInt(document.getElementById("enemy-count").value) || 47;
-            const blockCount = parseInt(document.getElementById("block-count").value) || 20;
-            const barrelCount = parseInt(document.getElementById("barrel-count").value) || 3;
-            const plutoniumCount = parseInt(document.getElementById("plutonium-count").value) || 5;
+            // Anzahl der Elemente
+            const wallCount = document.getElementById("wall-count").value || 50;
+            const enemyCount = document.getElementById("enemy-count").value || 3;
+            const blockCount = document.getElementById("block-count").value || 5;
+            const barrelCount = document.getElementById("barrel-count").value || 3;
+            const plutoniumCount = document.getElementById("plutonium-count").value || 3;
             
-            console.log(`Einstellungen: Wände=${wallCount}, Gegner=${enemyCount}, Blöcke=${blockCount}, Tonnen=${barrelCount}, Plutonium=${plutoniumCount}`);
-            
-            // Arrays zurücksetzen
+            // Arrays für die Elemente des Levels zurücksetzen
             walls = [];
             enemies = [];
-            plutonium = [];
-            barrels = [];
-            blocks = [];
             collectibleBlocks = [];
+            barrels = [];
+            plutonium = [];
             
-            // Spieler und Ausgang positionieren
-            player.x = 2;
-            player.y = 2;
-            player.visualX = 2;
-            player.visualY = 2;
-            player.lastX = 2;
-            player.lastY = 2;
+            // Erstelle ein leeres Grid für die Kollisionsprüfung
+            // 0 = frei, 1 = Wand/belegt, 2 = Exit
+            let grid = Array(gridHeight).fill().map(() => Array(gridWidth).fill(0));
             
-            exit = { x: GRID_WIDTH - 5, y: GRID_HEIGHT - 5 };
+            // Platziere den Spieler immer in der oberen linken Ecke (1,1)
+            player = { x: 1, y: 1 };
+            grid[1][1] = 3; // Markiere das Feld als vom Spieler belegt
             
-            // Außenwände erstellen
-            createBorderWalls();
-            console.log(`Außenwände erstellt: ${walls.length} Wandelemente`);
+            // Platziere den Ausgang immer in der unteren rechten Ecke (18,13)
+            exit = { x: gridWidth - 2, y: gridHeight - 2 };
+            grid[exit.y][exit.x] = 2; // Markiere den Ausgang im Grid
             
-            // Wandelemente erstellen und Erreichbarkeit sicherstellen
-            createAccessibleWalls(wallCount);
-            console.log(`Innenwände erstellt: ${walls.length - (GRID_WIDTH * 2 + GRID_HEIGHT * 2 - 4)} von ${wallCount} angeforderten Wandelementen`);
+            // Erstelle die Begrenzungsmauern rundherum
+            createBorderWalls(grid);
             
-            let placedEnemies = 0;
-            let placedPlutonium = 0;
-            let placedBarrels = 0;
-            let placedBlocks = 0;
+            // Erstelle eine zugängliche Karte mit der angegebenen Anzahl von Hindernissen
+            createAccessibleWalls(grid, wallCount);
             
-            // Gegner platzieren
-            console.log(`Versuche, ${enemyCount} Gegner zu platzieren...`);
-            for (let i = 0; i < enemyCount; i++) {
-                if (placeRandomElement('enemy')) {
-                    placedEnemies++;
-                }
-            }
-            console.log(`Gegner platziert: ${enemies.length} von ${enemyCount}`);
-            
-            // Plutonium platzieren
-            console.log(`Versuche, ${plutoniumCount} Plutonium zu platzieren...`);
-            for (let i = 0; i < plutoniumCount; i++) {
-                if (placeRandomElement('plutonium')) {
-                    placedPlutonium++;
-                }
-            }
-            console.log(`Plutonium platziert: ${plutonium.length} von ${plutoniumCount}`);
-            
-            // Tonnen platzieren
-            console.log(`Versuche, ${barrelCount} Tonnen zu platzieren...`);
-            for (let i = 0; i < barrelCount; i++) {
-                if (placeRandomElement('barrel')) {
-                    placedBarrels++;
-                }
-            }
-            console.log(`Tonnen platziert: ${barrels.length} von ${barrelCount}`);
-            
-            // Blöcke platzieren
-            console.log(`Versuche, ${blockCount} Blöcke zu platzieren...`);
-            for (let i = 0; i < blockCount; i++) {
-                if (placeRandomElement('block')) {
-                    placedBlocks++;
-                }
-            }
-            console.log(`Blöcke platziert: ${collectibleBlocks.length} von ${blockCount}`);
-            
-            // Startblöcke setzen
-            blocksCount = 15;
-            
-            // Alternativ: Zwangsplatzierung, falls nicht genug Elemente platziert wurden
-            // Dies stellt sicher, dass das Level immer genügend Elemente enthält
-            if (placedPlutonium === 0) {
-                console.log("WARNUNG: Keine Plutonium-Elemente platziert. Füge einige mit weniger strengen Kriterien hinzu.");
-                forcePlaceElements('plutonium', Math.max(1, plutoniumCount / 2));
-            }
-            
-            if (placedBarrels === 0) {
-                console.log("WARNUNG: Keine Tonnen platziert. Füge einige mit weniger strengen Kriterien hinzu.");
-                forcePlaceElements('barrel', Math.max(1, barrelCount / 2));
-            }
-            
-            // Debugging: Prüfe, ob im Level-Grid Elemente korrekt platziert sind
-            let gridDebug = Array(GRID_HEIGHT).fill().map(() => Array(GRID_WIDTH).fill('.'));
-            
-            // Markiere alle Elemente im Debug-Grid
-            walls.forEach(w => { if(w.x >= 0 && w.x < GRID_WIDTH && w.y >= 0 && w.y < GRID_HEIGHT) gridDebug[w.y][w.x] = '█'; });
-            enemies.forEach(e => { if(e.x >= 0 && e.x < GRID_WIDTH && e.y >= 0 && e.y < GRID_HEIGHT) gridDebug[e.y][e.x] = 'E'; });
-            plutonium.forEach(p => { if(p.x >= 0 && p.x < GRID_WIDTH && p.y >= 0 && p.y < GRID_HEIGHT) gridDebug[p.y][p.x] = 'P'; });
-            barrels.forEach(b => { if(b.x >= 0 && b.x < GRID_WIDTH && b.y >= 0 && b.y < GRID_HEIGHT) gridDebug[b.y][b.x] = 'B'; });
-            collectibleBlocks.forEach(c => { if(c.x >= 0 && c.x < GRID_WIDTH && c.y >= 0 && c.y < GRID_HEIGHT) gridDebug[c.y][c.x] = 'C'; });
-            gridDebug[player.y][player.x] = 'O';
-            gridDebug[exit.y][exit.x] = 'X';
-            
-            // Zähle Elemente im Grid
-            let counts = {
-                walls: 0,
-                enemies: 0,
-                plutonium: 0,
-                barrels: 0,
-                blocks: 0
-            };
-            
-            for(let y = 0; y < GRID_HEIGHT; y++) {
-                for(let x = 0; x < GRID_WIDTH; x++) {
-                    if(gridDebug[y][x] === '█') counts.walls++;
-                    else if(gridDebug[y][x] === 'E') counts.enemies++;
-                    else if(gridDebug[y][x] === 'P') counts.plutonium++;
-                    else if(gridDebug[y][x] === 'B') counts.barrels++;
-                    else if(gridDebug[y][x] === 'C') counts.blocks++;
+            // Erstelle die Arrays für die Spiellogik aus dem Grid
+            for (let y = 0; y < gridHeight; y++) {
+                for (let x = 0; x < gridWidth; x++) {
+                    if (grid[y][x] === 1) {
+                        walls.push({ x: x, y: y });
+                    }
                 }
             }
             
-            console.log("Grid-Elemente-Zählung:", counts);
-            console.log("Zufälliges Level erfolgreich generiert");
+            // Finde freie Positionen für Gegner, Blöcke, Tonnen und Plutonium
+            placeRandomElements(grid, 'enemies', enemyCount);
+            placeRandomElements(grid, 'blocks', blockCount);
+            placeRandomElements(grid, 'barrels', barrelCount);
+            placeRandomElements(grid, 'plutonium', plutoniumCount);
+            
+            console.log("Generierte Elemente:", 
+                     "Wände:", walls.length,
+                     "Gegner:", enemies.length,
+                     "Blöcke:", collectibleBlocks.length,
+                     "Tonnen:", barrels.length,
+                     "Plutonium:", plutonium.length);
+            
+            // Speichere das generierte Level als CSV-Datei
+            saveRandomLevelAsCSV(grid);
+        }
+        
+        // Funktion zum Speichern des Zufallslevels als CSV-Datei
+        function saveRandomLevelAsCSV(grid) {
+            // Konvertiere das Grid in CSV-Format
+            let csvContent = "";
+            for (let y = 0; y < grid.length; y++) {
+                csvContent += grid[y].join(',') + '\n';
+            }
+            
+            // Erstelle einen Timestamp als Teil des Dateinamens
+            const now = new Date();
+            const timestamp = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
+            
+            // Hole Parameter des Zufallslevels für den Dateinamen
+            const wallCount = document.getElementById("wall-count").value;
+            const enemyCount = document.getElementById("enemy-count").value;
+            const blockCount = document.getElementById("block-count").value;
+            const barrelCount = document.getElementById("barrel-count").value;
+            const plutoniumCount = document.getElementById("plutonium-count").value;
+            
+            // Erstelle einen Dateinamen mit den Level-Parametern und dem Timestamp
+            const filename = `Zone X Random Level - W${wallCount}_E${enemyCount}_B${blockCount}_T${barrelCount}_P${plutoniumCount}_${timestamp}.csv`;
+            
+            // Verwende Blob und URL.createObjectURL, um die Datei zum Download anzubieten
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            
+            link.setAttribute("href", url);
+            link.setAttribute("download", filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            
+            // Speichere die Datei auf dem Server mittels Fetch API
+            const formData = new FormData();
+            formData.append('file', blob, filename);
+            formData.append('filename', filename);
+            
+            fetch('save_level.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log(`Level erfolgreich als "${filename}" gespeichert.`);
+                    // Aktualisiere die Liste der gespeicherten Zufallslevels
+                    updateSavedRandomLevels();
+                } else {
+                    console.error('Fehler beim Speichern des Levels:', data.error);
+                    // Alternativ dem Benutzer einen Download anbieten
+                    link.click();
+                }
+                URL.revokeObjectURL(url);
+                document.body.removeChild(link);
+            })
+            .catch(error => {
+                console.error('Fehler beim Speichern des Levels:', error);
+                // Fallback: Biete dem Benutzer einen lokalen Download an
+                alert('Das Level konnte nicht auf dem Server gespeichert werden. Es wird stattdessen lokal als Datei heruntergeladen.');
+                link.click();
+                URL.revokeObjectURL(url);
+                document.body.removeChild(link);
+            });
+        }
+        
+        // Funktion zum Laden der Liste gespeicherter Zufallslevels
+        function updateSavedRandomLevels() {
+            // Füge UI-Element für gespeicherte Zufallslevels hinzu, falls es noch nicht existiert
+            let savedLevelsContainer = document.getElementById('saved-random-levels');
+            if (!savedLevelsContainer) {
+                // Erstelle Container für gespeicherte Zufallslevels
+                savedLevelsContainer = document.createElement('div');
+                savedLevelsContainer.id = 'saved-random-levels';
+                savedLevelsContainer.style.display = 'none'; // Standardmäßig ausgeblendet
+                savedLevelsContainer.style.margin = '20px 0';
+                savedLevelsContainer.style.maxHeight = '200px';
+                savedLevelsContainer.style.overflowY = 'auto';
+                savedLevelsContainer.style.border = '1px solid #555';
+                savedLevelsContainer.style.borderRadius = '3px';
+                savedLevelsContainer.style.padding = '10px';
+                
+                // Füge Titel hinzu
+                const title = document.createElement('div');
+                title.style.color = '#00ff00';
+                title.style.marginBottom = '10px';
+                title.textContent = 'Gespeicherte Zufallslevels:';
+                savedLevelsContainer.appendChild(title);
+                
+                // Erstelle die Level-Liste
+                const levelList = document.createElement('select');
+                levelList.id = 'saved-random-level-select';
+                levelList.style.width = '100%';
+                levelList.style.padding = '5px';
+                levelList.style.backgroundColor = '#333';
+                levelList.style.color = 'white';
+                levelList.style.border = '1px solid #555';
+                levelList.style.borderRadius = '3px';
+                savedLevelsContainer.appendChild(levelList);
+                
+                // Füge den Container nach dem random-level-options Container ein
+                document.getElementById('random-level-options').after(savedLevelsContainer);
+            }
+            
+            // Hole die Liste der gespeicherten Levels vom Server
+            fetch('list_random_levels.php')
+            .then(response => response.json())
+            .then(data => {
+                const levelSelect = document.getElementById('saved-random-level-select');
+                // Lösche vorhandene Optionen
+                levelSelect.innerHTML = '';
+                
+                // Option zum Generieren eines neuen Levels (Standardoption)
+                const newLevelOption = document.createElement('option');
+                newLevelOption.value = '';
+                newLevelOption.textContent = '-- Neues Zufallslevel generieren --';
+                levelSelect.appendChild(newLevelOption);
+                
+                // Füge gespeicherte Levels hinzu
+                if (data.levels && data.levels.length > 0) {
+                    document.getElementById('saved-random-levels').style.display = 'block';
+                    
+                    data.levels.forEach(level => {
+                        const option = document.createElement('option');
+                        option.value = level.filename;
+                        
+                        // Extrahiere Parameter und Datum aus dem Dateinamen für eine benutzerfreundlichere Anzeige
+                        const match = level.filename.match(/W(\d+)_E(\d+)_B(\d+)_T(\d+)_P(\d+)_(\d{8}_\d{6})\.csv$/);
+                        if (match) {
+                            const [, walls, enemies, blocks, barrels, plutonium, datetime] = match;
+                            const date = datetime.substr(0, 8);
+                            const time = datetime.substr(9);
+                            const formattedDate = `${date.substr(6, 2)}.${date.substr(4, 2)}.${date.substr(0, 4)}`;
+                            const formattedTime = `${time.substr(0, 2)}:${time.substr(2, 2)}`;
+                            option.textContent = `Level (W:${walls} E:${enemies} B:${blocks} T:${barrels} P:${plutonium}) - ${formattedDate} ${formattedTime}`;
+                        } else {
+                            option.textContent = level.filename;
+                        }
+                        
+                        levelSelect.appendChild(option);
+                    });
+                    
+                    // Zeige den Bereich für gespeicherte Levels an
+                    document.getElementById('saved-random-levels').style.display = 'block';
+                } else {
+                    // Keine gespeicherten Levels verfügbar
+                    document.getElementById('saved-random-levels').style.display = 'none';
+                }
+            })
+            .catch(error => {
+                console.error('Fehler beim Laden der gespeicherten Levels:', error);
+                // Verstecke den Bereich für gespeicherte Levels
+                document.getElementById('saved-random-levels').style.display = 'none';
+            });
         }
         
         // Elemente mit weniger strengen Kriterien platzieren (Notfall-Funktion)
@@ -1975,127 +2067,164 @@
         }
         
         // Außenwände erstellen
-        function createBorderWalls() {
-            console.log("Erstelle Außenwände...");
+        function createBorderWalls(grid) {
+            const gridHeight = grid.length;
+            const gridWidth = grid[0].length;
             
-            for (let x = 0; x < GRID_WIDTH; x++) {
-                for (let y = 0; y < GRID_HEIGHT; y++) {
-                    if (x === 0 || x === GRID_WIDTH - 1 || y === 0 || y === GRID_HEIGHT - 1) {
-                        walls.push({ x, y });
+            // Obere und untere Wand
+            for (let x = 0; x < gridWidth; x++) {
+                grid[0][x] = 1;  // Obere Wand
+                grid[gridHeight - 1][x] = 1;  // Untere Wand
+            }
+            
+            // Linke und rechte Wand
+            for (let y = 0; y < gridHeight; y++) {
+                grid[y][0] = 1;  // Linke Wand
+                grid[y][gridWidth - 1] = 1;  // Rechte Wand
+            }
+        }
+        
+        // Erstellt eine zugängliche Karte mit Wänden
+        function createAccessibleWalls(grid, wallCount) {
+            const gridHeight = grid.length;
+            const gridWidth = grid[0].length;
+            let placedWalls = 0;
+            
+            // Versuche, Wände zu platzieren
+            for (let attempt = 0; attempt < wallCount * 2 && placedWalls < wallCount; attempt++) {
+                // Zufällige Position innerhalb des Spielfelds
+                const x = Math.floor(Math.random() * (gridWidth - 2)) + 1;
+                const y = Math.floor(Math.random() * (gridHeight - 2)) + 1;
+                
+                // Überspringe, wenn die Position bereits belegt ist
+                if (grid[y][x] !== 0) {
+                    continue;
+                }
+                
+                // Temporär Wand platzieren
+                grid[y][x] = 1;
+                
+                // Prüfen, ob das Level noch zugänglich ist
+                if (isLevelAccessible(grid)) {
+                    placedWalls++;
+                } else {
+                    // Wand entfernen, wenn die Zugänglichkeit nicht mehr gegeben ist
+                    grid[y][x] = 0;
+                }
+            }
+            
+            console.log(`Wände platziert: ${placedWalls} von ${wallCount} angeforderten Wänden`);
+        }
+        
+        // Prüft, ob der Ausgang vom Spieler aus erreichbar ist
+        function isLevelAccessible(grid) {
+            const gridHeight = grid.length;
+            const gridWidth = grid[0].length;
+            
+            // Finde Startposition (Spieler) und Zielposition (Ausgang)
+            let startX = 0, startY = 0;
+            let targetX = 0, targetY = 0;
+            
+            for (let y = 0; y < gridHeight; y++) {
+                for (let x = 0; x < gridWidth; x++) {
+                    if (grid[y][x] === 3) { // Spieler
+                        startX = x;
+                        startY = y;
+                    } else if (grid[y][x] === 2) { // Ausgang
+                        targetX = x;
+                        targetY = y;
                     }
                 }
             }
-            console.log(`${GRID_WIDTH * 2 + GRID_HEIGHT * 2 - 4} Außenwand-Elemente erstellt`);
-        }
-        
-        // Wandelemente erstellen mit garantierter Zugänglichkeit
-        function createAccessibleWalls(count) {
-            // Versuche, so viele Wände wie möglich zu platzieren
-            let placedWalls = 0;
-            let maxAttempts = count * 3; // Mehr Versuche als tatsächlich benötigte Wände
             
-            console.log(`Versuche, ${count} Wände zu platzieren mit maximal ${maxAttempts} Versuchen`);
+            // Erstelle eine Kopie des Grids für die Pfadsuche
+            let visited = Array(gridHeight).fill().map((_, y) => 
+                Array(gridWidth).fill().map((_, x) => 
+                    grid[y][x] === 1 ? 1 : 0 // 1 = Wand/besucht, 0 = frei/unbesucht
+                )
+            );
             
-            for (let i = 0; i < maxAttempts && placedWalls < count; i++) {
-                // Zufällige Position für Wandelement
-                const x = Math.floor(Math.random() * (GRID_WIDTH - 4)) + 2;
-                const y = Math.floor(Math.random() * (GRID_HEIGHT - 4)) + 2;
-                
-                // Prüfe, ob Position bereits belegt ist oder zu nah am Spieler/Ausgang
-                if (isWall(x, y) || 
-                    (x === player.x && y === player.y) ||
-                    (x === exit.x && y === exit.y) ||
-                    (Math.abs(x - player.x) < 3 && Math.abs(y - player.y) < 3) || 
-                    (Math.abs(x - exit.x) < 3 && Math.abs(y - exit.y) < 3)) {
-                    continue;
-                }
-                
-                // Füge Wand temporär hinzu
-                walls.push({ x, y });
-                
-                // Prüfe, ob das Level noch zugänglich ist
-                if (!isLevelAccessible()) {
-                    // Wenn nicht, entferne die letzte Wand wieder
-                    walls.pop();
-                    continue;
-                }
-                
-                // Wand erfolgreich platziert
-                placedWalls++;
-                
-                if (placedWalls % 20 === 0 || placedWalls === count) {
-                    console.log(`${placedWalls} von ${count} Wänden platziert (Versuch ${i+1})`);
-                }
-            }
+            // Breitensuche für Pfadfindung
+            let queue = [{x: startX, y: startY}];
+            visited[startY][startX] = 1; // Startposition als besucht markieren
             
-            console.log(`Insgesamt ${placedWalls} von ${count} angeforderten Wandelementen platziert`);
-        }
-        
-        // Level-Zugänglichkeit prüfen
-        function isLevelAccessible() {
-            // Wir erstellen eine Kopie des Grids und markieren erreichbare Zellen
-            // 0 = unbesucht, 1 = besucht, 2 = Wand
-            const grid = Array(GRID_HEIGHT).fill().map(() => Array(GRID_WIDTH).fill(0));
+            const directions = [
+                {dx: 0, dy: -1}, // Oben
+                {dx: 1, dy: 0},  // Rechts
+                {dx: 0, dy: 1},  // Unten
+                {dx: -1, dy: 0}  // Links
+            ];
             
-            // Wände markieren
-            for (let wall of walls) {
-                if (wall.x >= 0 && wall.x < GRID_WIDTH && wall.y >= 0 && wall.y < GRID_HEIGHT) {
-                    grid[wall.y][wall.x] = 2;
-                }
-            }
-            
-            // Startpunkt markieren
-            const queue = [{ x: player.x, y: player.y }];
-            grid[player.y][player.x] = 1;
-            
-            // Besuche alle erreichbaren Zellen mit Breitensuche
             while (queue.length > 0) {
                 const current = queue.shift();
                 
-                // Nachbarzellen überprüfen
-                const neighbors = [
-                    { x: current.x, y: current.y - 1 }, // Oben
-                    { x: current.x + 1, y: current.y }, // Rechts
-                    { x: current.x, y: current.y + 1 }, // Unten
-                    { x: current.x - 1, y: current.y }  // Links
-                ];
+                // Ziel gefunden?
+                if (current.x === targetX && current.y === targetY) {
+                    return true;
+                }
                 
-                for (let neighbor of neighbors) {
-                    // Prüfen, ob im Spielfeld und noch nicht besucht und keine Wand
-                    if (neighbor.x >= 0 && neighbor.x < GRID_WIDTH && 
-                        neighbor.y >= 0 && neighbor.y < GRID_HEIGHT && 
-                        grid[neighbor.y][neighbor.x] === 0) {
-                        
-                        grid[neighbor.y][neighbor.x] = 1;
-                        queue.push(neighbor);
+                // Prüfe alle vier Richtungen
+                for (const dir of directions) {
+                    const newX = current.x + dir.dx;
+                    const newY = current.y + dir.dy;
+                    
+                    // Prüfe, ob die neue Position gültig und unbesucht ist
+                    if (
+                        newX >= 0 && newX < gridWidth &&
+                        newY >= 0 && newY < gridHeight &&
+                        visited[newY][newX] === 0
+                    ) {
+                        visited[newY][newX] = 1; // Als besucht markieren
+                        queue.push({x: newX, y: newY});
                     }
                 }
             }
             
-            // Prüfen, ob der Ausgang erreichbar ist
-            if (grid[exit.y][exit.x] !== 1) {
-                console.log("Der Ausgang ist nicht erreichbar, verwerfe diese Wandplatzierung.");
-                return false;
-            }
+            // Kein Pfad gefunden
+            return false;
+        }
+        
+        // Platziert zufällig Elemente im Spielfeld
+        function placeRandomElements(grid, elementType, count) {
+            const gridHeight = grid.length;
+            const gridWidth = grid[0].length;
+            let placedElements = 0;
             
-            // Prüfen, ob genug freier Platz für Gegner, Plutonium, etc. verfügbar ist
-            const minFreeSpace = 200; // Mindestanzahl freier Zellen
-            let freeCount = 0;
-            
-            for (let y = 0; y < GRID_HEIGHT; y++) {
-                for (let x = 0; x < GRID_WIDTH; x++) {
-                    if (grid[y][x] === 1) {
-                        freeCount++;
-                    }
+            // Versuche, Elemente zu platzieren
+            for (let attempt = 0; attempt < count * 3 && placedElements < count; attempt++) {
+                // Zufällige Position innerhalb des Spielfelds (nicht am Rand)
+                const x = Math.floor(Math.random() * (gridWidth - 4)) + 2;
+                const y = Math.floor(Math.random() * (gridHeight - 4)) + 2;
+                
+                // Überspringe, wenn die Position bereits belegt ist
+                if (grid[y][x] !== 0) {
+                    continue;
                 }
+                
+                // Element platzieren
+                switch (elementType) {
+                    case 'enemies':
+                        enemies.push({x: x, y: y, direction: Math.floor(Math.random() * 4)});
+                        grid[y][x] = 4; // Markiere als Gegner
+                        break;
+                    case 'blocks':
+                        collectibleBlocks.push({x: x, y: y});
+                        grid[y][x] = 5; // Markiere als Block
+                        break;
+                    case 'barrels':
+                        barrels.push({x: x, y: y});
+                        grid[y][x] = 6; // Markiere als Tonne
+                        break;
+                    case 'plutonium':
+                        plutonium.push({x: x, y: y});
+                        grid[y][x] = 7; // Markiere als Plutonium
+                        break;
+                }
+                
+                placedElements++;
             }
             
-            if (freeCount < minFreeSpace) {
-                console.log(`Nicht genug freier Platz (${freeCount}/${minFreeSpace}), verwerfe diese Wandplatzierung.`);
-                return false;
-            }
-            
-            return true;
+            console.log(`${elementType} platziert: ${placedElements} von ${count}`);
         }
         
         // Sound-Toggle-Button-Handler
@@ -2104,6 +2233,611 @@
             this.textContent = soundEnabled ? 'An' : 'Aus';
             this.style.backgroundColor = soundEnabled ? '#00aa00' : '#aa0000';
         });
+        
+        // Funktion zum Laden eines gespeicherten Levels aus einer Datei
+        async function loadLevelFromFile(filePath) {
+            try {
+                console.log(`Lade Level aus Datei ${filePath}...`);
+                const response = await fetch(filePath);
+                
+                if (!response.ok) {
+                    throw new Error(`Fehler beim Laden des Levels: ${response.status}`);
+                }
+                
+                const csvText = await response.text();
+                parseCSVLevel(csvText);
+                console.log(`Level aus Datei ${filePath} erfolgreich geladen`);
+                return true;
+            } catch (error) {
+                console.error(`Fehler beim Laden des Levels aus Datei: ${error}`);
+                return false;
+            }
+        }
+        
+        // Modifiziere die loadLevel-Funktion, um gespeicherte Zufallslevels zu laden
+        async function loadLevel(level) {
+            console.log(`Level ${level} wird geladen...`);
+            
+            // Level-spezifische Einstellungen
+            resetGame();
+            
+            // Wenn Zufallslevel gewählt wurde, prüfe, ob ein gespeichertes Zufallslevel ausgewählt wurde
+            if (isRandomLevel) {
+                const savedLevelSelect = document.getElementById('saved-random-level-select');
+                
+                if (savedLevelSelect && savedLevelSelect.value) {
+                    // Ein gespeichertes Zufallslevel wurde ausgewählt
+                    console.log(`Gespeichertes Zufallslevel "${savedLevelSelect.value}" wird geladen...`);
+                    if (await loadLevelFromFile(`levels/${savedLevelSelect.value}`)) {
+                        console.log("Gespeichertes Zufallslevel erfolgreich geladen");
+                        return;
+                    } else {
+                        console.error(`Fehler beim Laden des gespeicherten Zufallslevels "${savedLevelSelect.value}"`);
+                        // Fallback: Generiere ein neues Zufallslevel
+                    }
+                }
+                
+                // Kein gespeichertes Level ausgewählt oder Laden fehlgeschlagen, generiere ein neues
+                console.log("Zufallslevel wird generiert statt CSV-Level zu laden");
+                generateRandomAccessibleLevel();
+                console.log("Prüfe generierte Arrays: Wände:", walls.length, "Gegner:", enemies.length, 
+                        "Plutonium:", plutonium.length, "Tonnen:", barrels.length, 
+                        "Aufsammelbare Blöcke:", collectibleBlocks.length);
+                return;
+            }
+            
+            // Ansonsten versuche, das Level aus der CSV-Datei zu laden
+            if (await loadLevelFromCSV(level)) {
+                console.log("CSV-Level erfolgreich geladen");
+            } else {
+                console.log("Fallback: Automatisch generiertes Level wird verwendet");
+                // Fallback-Generierung der Level-Elemente bereits in loadLevelFromCSV erledigt
+            }
+            
+            console.log(`Level ${level} geladen`);
+        }
+
+        // Nach dem Laden der Seite die Liste der gespeicherten Levels aktualisieren
+        window.addEventListener('DOMContentLoaded', function() {
+            // Synchronisierung für alle Slider einrichten
+            setupSliderInputSync('wall-count-slider', 'wall-count');
+            setupSliderInputSync('enemy-count-slider', 'enemy-count');
+            setupSliderInputSync('block-count-slider', 'block-count');
+            setupSliderInputSync('barrel-count-slider', 'barrel-count');
+            setupSliderInputSync('plutonium-count-slider', 'plutonium-count');
+            
+            // Erstelle ein PHP-Skript zum Speichern und Auflisten von Levels, falls es noch nicht existiert
+            createPhpScripts();
+        });
+
+        // Funktion zum Erstellen der benötigten PHP-Skripte
+        function createPhpScripts() {
+            // save_level.php
+            const saveLevelPhp = `<?php
+            // Prüfe, ob eine Datei hochgeladen wurde
+            if (isset($_FILES['file']) && isset($_POST['filename'])) {
+                $targetDir = "levels/";
+                $filename = $_POST['filename'];
+                $targetFile = $targetDir . $filename;
+                
+                // Erstelle das Zielverzeichnis, falls es noch nicht existiert
+                if (!file_exists($targetDir)) {
+                    mkdir($targetDir, 0777, true);
+                }
+                
+                // Versuche, die Datei zu speichern
+                if (move_uploaded_file($_FILES['file']['tmp_name'], $targetFile)) {
+                    echo json_encode(['success' => true, 'message' => 'Level erfolgreich gespeichert']);
+                } else {
+                    echo json_encode(['success' => false, 'error' => 'Fehler beim Speichern des Levels']);
+                }
+            } else {
+                echo json_encode(['success' => false, 'error' => 'Keine Datei oder kein Dateiname angegeben']);
+            }
+            ?>`;
+
+            // list_random_levels.php
+            const listLevelsPhp = `<?php
+            $targetDir = "levels/";
+            $levels = [];
+
+            // Prüfe, ob das Verzeichnis existiert
+            if (file_exists($targetDir) && is_dir($targetDir)) {
+                // Suche nach Dateien, die dem Muster der Zufallslevels entsprechen
+                $files = glob($targetDir . "Zone X Random Level - W*.csv");
+                
+                foreach ($files as $file) {
+                    $filename = basename($file);
+                    $filetime = filemtime($file);
+                    
+                    $levels[] = [
+                        'filename' => $filename,
+                        'timestamp' => $filetime
+                    ];
+                }
+                
+                // Sortiere nach Zeitstempel (neueste zuerst)
+                usort($levels, function($a, $b) {
+                    return $b['timestamp'] - $a['timestamp'];
+                });
+            }
+
+            // Gib die Level-Liste als JSON zurück
+            echo json_encode(['success' => true, 'levels' => $levels]);
+            ?>`;
+
+            // Erstelle die PHP-Skripte mittels Fetch API
+            const createScriptFile = (filename, content) => {
+                const formData = new FormData();
+                formData.append('file', new Blob([content], { type: 'application/x-php' }), filename);
+                formData.append('filename', filename);
+                
+                fetch('create_php_script.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        console.log(`PHP-Skript "${filename}" erfolgreich erstellt.`);
+                    } else {
+                        console.error(`Fehler beim Erstellen des PHP-Skripts "${filename}":`, data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error(`Fehler beim Erstellen des PHP-Skripts "${filename}":`, error);
+                });
+            };
+            
+            // Erstelle ein PHP-Skript zum Erstellen von PHP-Skripten (Meta!)
+            const createScriptCreator = () => {
+                const blob = new Blob([`<?php
+                // Prüfe, ob eine Datei hochgeladen wurde
+                if (isset($_FILES['file']) && isset($_POST['filename'])) {
+                    $filename = $_POST['filename'];
+                    
+                    // Versuche, die Datei zu speichern
+                    if (move_uploaded_file($_FILES['file']['tmp_name'], $filename)) {
+                        echo json_encode(['success' => true, 'message' => 'PHP-Skript erfolgreich erstellt']);
+                    } else {
+                        echo json_encode(['success' => false, 'error' => 'Fehler beim Erstellen des PHP-Skripts']);
+                    }
+                } else {
+                    echo json_encode(['success' => false, 'error' => 'Keine Datei oder kein Dateiname angegeben']);
+                }
+                ?>`], { type: 'application/x-php' });
+                
+                const link = document.createElement("a");
+                const url = URL.createObjectURL(blob);
+                
+                link.setAttribute("href", url);
+                link.setAttribute("download", "create_php_script.php");
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                
+                link.click();
+                URL.revokeObjectURL(url);
+                document.body.removeChild(link);
+                
+                alert("Bitte lade die Datei 'create_php_script.php' in dein Webserver-Verzeichnis hoch, um gespeicherte Zufallslevels zu unterstützen.");
+            };
+            
+            // Versuche, die PHP-Skripte zu erstellen
+            try {
+                // Prüfe, ob der Server PHP unterstützt
+                fetch('create_php_script.php', { method: 'HEAD' })
+                .then(response => {
+                    if (response.ok) {
+                        // Server unterstützt PHP, erstelle die Skripte
+                        createScriptFile('save_level.php', saveLevelPhp);
+                        createScriptFile('list_random_levels.php', listLevelsPhp);
+                    } else {
+                        // Server unterstützt PHP nicht oder das Skript existiert nicht
+                        createScriptCreator();
+                    }
+                })
+                .catch(() => {
+                    // Fehler beim Prüfen, biete Download an
+                    createScriptCreator();
+                });
+            } catch (error) {
+                console.error('Fehler beim Erstellen der PHP-Skripte:', error);
+                createScriptCreator();
+            }
+        }
+
+        // Alternative Lösung für den Fall, dass PHP nicht verfügbar ist:
+        // Lokale Speicherung der Level über LocalStorage
+        function saveRandomLevelToLocalStorage(grid, metadata) {
+            try {
+                // Konvertiere das Grid in CSV-Format
+                let csvContent = "";
+                for (let y = 0; y < grid.length; y++) {
+                    csvContent += grid[y].join(',') + '\n';
+                }
+                
+                // Erstelle einen Eintrag für die Level-Liste
+                const levelList = JSON.parse(localStorage.getItem('randomLevels') || '[]');
+                const levelEntry = {
+                    id: Date.now().toString(),
+                    date: new Date().toISOString(),
+                    filename: metadata.filename,
+                    walls: metadata.walls,
+                    enemies: metadata.enemies,
+                    blocks: metadata.blocks,
+                    barrels: metadata.barrels,
+                    plutonium: metadata.plutonium,
+                    csvContent: csvContent
+                };
+                
+                // Füge das Level zur Liste hinzu und speichere die aktualisierte Liste
+                levelList.push(levelEntry);
+                localStorage.setItem('randomLevels', JSON.stringify(levelList));
+                
+                console.log(`Level erfolgreich in LocalStorage gespeichert (ID: ${levelEntry.id})`);
+                return true;
+            } catch (error) {
+                console.error('Fehler beim Speichern des Levels in LocalStorage:', error);
+                return false;
+            }
+        }
+
+        // Lokales Laden der gespeicherten Level-Liste
+        function updateSavedRandomLevelsFromLocalStorage() {
+            try {
+                const levelList = JSON.parse(localStorage.getItem('randomLevels') || '[]');
+                
+                // Sortiere nach Datum (neueste zuerst)
+                levelList.sort((a, b) => new Date(b.date) - new Date(a.date));
+                
+                // Aktualisiere die UI
+                const savedLevelsContainer = document.getElementById('saved-random-levels') || createSavedLevelsContainer();
+                const levelSelect = document.getElementById('saved-random-level-select');
+                
+                // Lösche vorhandene Optionen
+                levelSelect.innerHTML = '';
+                
+                // Option zum Generieren eines neuen Levels (Standardoption)
+                const newLevelOption = document.createElement('option');
+                newLevelOption.value = '';
+                newLevelOption.textContent = '-- Neues Zufallslevel generieren --';
+                levelSelect.appendChild(newLevelOption);
+                
+                // Füge gespeicherte Levels hinzu
+                if (levelList.length > 0) {
+                    savedLevelsContainer.style.display = 'block';
+                    
+                    levelList.forEach(level => {
+                        const option = document.createElement('option');
+                        option.value = level.id;
+                        
+                        // Formatiere das Datum für bessere Lesbarkeit
+                        const date = new Date(level.date);
+                        const formattedDate = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}.${date.getFullYear()}`;
+                        const formattedTime = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+                        
+                        option.textContent = `Level (W:${level.walls} E:${level.enemies} B:${level.blocks} T:${level.barrels} P:${level.plutonium}) - ${formattedDate} ${formattedTime}`;
+                        levelSelect.appendChild(option);
+                    });
+                } else {
+                    savedLevelsContainer.style.display = 'none';
+                }
+                
+                console.log(`${levelList.length} gespeicherte Level aus LocalStorage geladen`);
+                return true;
+            } catch (error) {
+                console.error('Fehler beim Laden der Level aus LocalStorage:', error);
+                return false;
+            }
+        }
+
+        // Erstellt den Container für gespeicherte Levels, wenn er noch nicht existiert
+        function createSavedLevelsContainer() {
+            const savedLevelsContainer = document.createElement('div');
+            savedLevelsContainer.id = 'saved-random-levels';
+            savedLevelsContainer.style.display = 'none';
+            savedLevelsContainer.style.margin = '20px 0';
+            savedLevelsContainer.style.maxHeight = '200px';
+            savedLevelsContainer.style.overflowY = 'auto';
+            savedLevelsContainer.style.border = '1px solid #555';
+            savedLevelsContainer.style.borderRadius = '3px';
+            savedLevelsContainer.style.padding = '10px';
+            
+            // Füge Titel hinzu
+            const title = document.createElement('div');
+            title.style.color = '#00ff00';
+            title.style.marginBottom = '10px';
+            title.textContent = 'Gespeicherte Zufallslevels:';
+            savedLevelsContainer.appendChild(title);
+            
+            // Erstelle die Level-Liste
+            const levelList = document.createElement('select');
+            levelList.id = 'saved-random-level-select';
+            levelList.style.width = '100%';
+            levelList.style.padding = '5px';
+            levelList.style.backgroundColor = '#333';
+            levelList.style.color = 'white';
+            levelList.style.border = '1px solid #555';
+            levelList.style.borderRadius = '3px';
+            savedLevelsContainer.appendChild(levelList);
+            
+            // Füge den Container nach dem random-level-options Container ein
+            document.getElementById('random-level-options').after(savedLevelsContainer);
+            
+            return savedLevelsContainer;
+        }
+
+        // Modifiziere die updateSavedRandomLevels-Funktion, um auch LocalStorage-Fallback zu unterstützen
+        function updateSavedRandomLevels() {
+            // Füge UI-Element für gespeicherte Zufallslevels hinzu, falls es noch nicht existiert
+            let savedLevelsContainer = document.getElementById('saved-random-levels');
+            if (!savedLevelsContainer) {
+                savedLevelsContainer = createSavedLevelsContainer();
+            }
+            
+            // Versuche zuerst, die Liste vom Server zu laden
+            fetch('list_random_levels.php')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Server unterstützt PHP nicht oder list_random_levels.php existiert nicht');
+                }
+                return response.json();
+            })
+            .then(data => {
+                const levelSelect = document.getElementById('saved-random-level-select');
+                // Lösche vorhandene Optionen
+                levelSelect.innerHTML = '';
+                
+                // Option zum Generieren eines neuen Levels (Standardoption)
+                const newLevelOption = document.createElement('option');
+                newLevelOption.value = '';
+                newLevelOption.textContent = '-- Neues Zufallslevel generieren --';
+                levelSelect.appendChild(newLevelOption);
+                
+                // Füge gespeicherte Levels hinzu
+                if (data.levels && data.levels.length > 0) {
+                    document.getElementById('saved-random-levels').style.display = 'block';
+                    
+                    data.levels.forEach(level => {
+                        const option = document.createElement('option');
+                        option.value = level.filename;
+                        
+                        // Extrahiere Parameter und Datum aus dem Dateinamen für eine benutzerfreundlichere Anzeige
+                        const match = level.filename.match(/W(\d+)_E(\d+)_B(\d+)_T(\d+)_P(\d+)_(\d{8}_\d{6})\.csv$/);
+                        if (match) {
+                            const [, walls, enemies, blocks, barrels, plutonium, datetime] = match;
+                            const date = datetime.substr(0, 8);
+                            const time = datetime.substr(9);
+                            const formattedDate = `${date.substr(6, 2)}.${date.substr(4, 2)}.${date.substr(0, 4)}`;
+                            const formattedTime = `${time.substr(0, 2)}:${time.substr(2, 2)}`;
+                            option.textContent = `Level (W:${walls} E:${enemies} B:${blocks} T:${barrels} P:${plutonium}) - ${formattedDate} ${formattedTime}`;
+                        } else {
+                            option.textContent = level.filename;
+                        }
+                        
+                        levelSelect.appendChild(option);
+                    });
+                    
+                    // Zeige den Bereich für gespeicherte Levels an
+                    document.getElementById('saved-random-levels').style.display = 'block';
+                } else {
+                    // Keine gespeicherten Levels verfügbar
+                    document.getElementById('saved-random-levels').style.display = 'none';
+                }
+            })
+            .catch(error => {
+                console.error('Fehler beim Laden der gespeicherten Levels vom Server:', error);
+                // Fallback: Versuche, die Level aus dem LocalStorage zu laden
+                console.log('Versuche Fallback: Lade Level aus LocalStorage...');
+                updateSavedRandomLevelsFromLocalStorage();
+            });
+        }
+
+        // Modifiziere die saveRandomLevelAsCSV-Funktion, um auch LocalStorage-Fallback zu unterstützen
+        function saveRandomLevelAsCSV(grid) {
+            // Konvertiere das Grid in CSV-Format
+            let csvContent = "";
+            for (let y = 0; y < grid.length; y++) {
+                csvContent += grid[y].join(',') + '\n';
+            }
+            
+            // Erstelle einen Timestamp als Teil des Dateinamens
+            const now = new Date();
+            const timestamp = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
+            
+            // Hole Parameter des Zufallslevels für den Dateinamen
+            const wallCount = document.getElementById("wall-count").value;
+            const enemyCount = document.getElementById("enemy-count").value;
+            const blockCount = document.getElementById("block-count").value;
+            const barrelCount = document.getElementById("barrel-count").value;
+            const plutoniumCount = document.getElementById("plutonium-count").value;
+            
+            // Erstelle einen Dateinamen mit den Level-Parametern und dem Timestamp
+            const filename = `Zone X Random Level - W${wallCount}_E${enemyCount}_B${blockCount}_T${barrelCount}_P${plutoniumCount}_${timestamp}.csv`;
+            
+            // Erstelle Metadaten für LocalStorage-Speicherung
+            const metadata = {
+                filename: filename,
+                walls: wallCount,
+                enemies: enemyCount,
+                blocks: blockCount,
+                barrels: barrelCount,
+                plutonium: plutoniumCount,
+                date: now
+            };
+            
+            // Verwende Blob und URL.createObjectURL, um die Datei zum Download anzubieten
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            
+            link.setAttribute("href", url);
+            link.setAttribute("download", filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            
+            // Versuche zuerst, die Datei auf dem Server zu speichern
+            const formData = new FormData();
+            formData.append('file', blob, filename);
+            formData.append('filename', filename);
+            
+            fetch('save_level.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Server unterstützt PHP nicht oder save_level.php existiert nicht');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    console.log(`Level erfolgreich als "${filename}" auf dem Server gespeichert.`);
+                    // Aktualisiere die Liste der gespeicherten Zufallslevels
+                    updateSavedRandomLevels();
+                } else {
+                    throw new Error(data.error || 'Unbekannter Fehler beim Speichern des Levels');
+                }
+            })
+            .catch(error => {
+                console.error('Fehler beim Speichern des Levels auf dem Server:', error);
+                // Fallback: Speichere im LocalStorage
+                console.log('Versuche Fallback: Speichere Level im LocalStorage...');
+                if (saveRandomLevelToLocalStorage(grid, metadata)) {
+                    console.log(`Level erfolgreich im LocalStorage gespeichert.`);
+                    // Aktualisiere die Liste der gespeicherten Zufallslevels
+                    updateSavedRandomLevelsFromLocalStorage();
+                } else {
+                    // Letzter Fallback: Biete dem Benutzer einen lokalen Download an
+                    console.log('Versuche Fallback: Biete lokalen Download an...');
+                    alert('Das Level konnte weder auf dem Server noch im LocalStorage gespeichert werden. Es wird stattdessen lokal als Datei heruntergeladen.');
+                    link.click();
+                }
+            })
+            .finally(() => {
+                URL.revokeObjectURL(url);
+                document.body.removeChild(link);
+            });
+        }
+
+        // Modifiziere den Random-Level-Button-Handler, um auch LocalStorage zu berücksichtigen
+        document.getElementById('random-level-btn').addEventListener('click', function() {
+            isRandomLevel = true;
+            document.getElementById('standard-level-options').style.display = 'none';
+            document.getElementById('random-level-options').style.display = 'block';
+            document.getElementById('standard-level-btn').style.backgroundColor = '#555';
+            document.getElementById('random-level-btn').style.backgroundColor = '#00aa00';
+            
+            // Versuche, die PHP-basierten gespeicherten Levels zu laden, Fallback auf LocalStorage
+            updateSavedRandomLevels();
+        });
+
+        // Lade ein Level aus dem LocalStorage
+        function loadLevelFromLocalStorage(levelId) {
+            try {
+                // Lade die Liste der gespeicherten Levels
+                const levelList = JSON.parse(localStorage.getItem('randomLevels') || '[]');
+                
+                // Suche das Level mit der angegebenen ID
+                const level = levelList.find(level => level.id === levelId);
+                
+                if (!level) {
+                    throw new Error(`Level mit ID ${levelId} nicht im LocalStorage gefunden`);
+                }
+                
+                // Parse das CSV-Format
+                const csvText = level.csvContent;
+                parseCSVLevel(csvText);
+                
+                console.log(`Level mit ID ${levelId} erfolgreich aus LocalStorage geladen`);
+                return true;
+            } catch (error) {
+                console.error(`Fehler beim Laden des Levels aus LocalStorage:`, error);
+                return false;
+            }
+        }
+
+        // Modifiziere die loadLevel-Funktion für den LocalStorage-Fallback
+        async function loadLevel(level) {
+            console.log(`Level ${level} wird geladen...`);
+            
+            // Level-spezifische Einstellungen
+            resetGame();
+            
+            // Wenn Zufallslevel gewählt wurde, prüfe, ob ein gespeichertes Zufallslevel ausgewählt wurde
+            if (isRandomLevel) {
+                const savedLevelSelect = document.getElementById('saved-random-level-select');
+                
+                if (savedLevelSelect && savedLevelSelect.value) {
+                    // Prüfe, ob das Level eine ID (LocalStorage) oder ein Dateiname (Server) ist
+                    const isLocalStorageId = !savedLevelSelect.value.includes('.csv');
+                    
+                    if (isLocalStorageId) {
+                        // Lade das Level aus dem LocalStorage
+                        console.log(`Gespeichertes Zufallslevel mit ID "${savedLevelSelect.value}" wird aus dem LocalStorage geladen...`);
+                        if (loadLevelFromLocalStorage(savedLevelSelect.value)) {
+                            console.log("Gespeichertes Zufallslevel erfolgreich aus LocalStorage geladen");
+                            return;
+                        } else {
+                            console.error(`Fehler beim Laden des gespeicherten Zufallslevels mit ID "${savedLevelSelect.value}" aus LocalStorage`);
+                            // Fallback: Generiere ein neues Zufallslevel
+                        }
+                    } else {
+                        // Lade das Level vom Server
+                        console.log(`Gespeichertes Zufallslevel "${savedLevelSelect.value}" wird vom Server geladen...`);
+                        if (await loadLevelFromFile(`levels/${savedLevelSelect.value}`)) {
+                            console.log("Gespeichertes Zufallslevel erfolgreich vom Server geladen");
+                            return;
+                        } else {
+                            console.error(`Fehler beim Laden des gespeicherten Zufallslevels "${savedLevelSelect.value}" vom Server`);
+                            // Fallback: Generiere ein neues Zufallslevel
+                        }
+                    }
+                }
+                
+                // Kein gespeichertes Level ausgewählt oder Laden fehlgeschlagen, generiere ein neues
+                console.log("Zufallslevel wird generiert statt CSV-Level zu laden");
+                generateRandomAccessibleLevel();
+                console.log("Prüfe generierte Arrays: Wände:", walls.length, "Gegner:", enemies.length, 
+                           "Plutonium:", plutonium.length, "Tonnen:", barrels.length, 
+                           "Aufsammelbare Blöcke:", collectibleBlocks.length);
+                return;
+            }
+            
+            // Ansonsten versuche, das Level aus der CSV-Datei zu laden
+            if (await loadLevelFromCSV(level)) {
+                console.log("CSV-Level erfolgreich geladen");
+            } else {
+                console.log("Fallback: Automatisch generiertes Level wird verwendet");
+                // Fallback-Generierung der Level-Elemente bereits in loadLevelFromCSV erledigt
+            }
+            
+            console.log(`Level ${level} geladen`);
+        }
+
+        // Lädt ein Level aus einer CSV-Datei
+        async function loadLevelFromFile(filename) {
+            try {
+                console.log(`Lade Level aus Datei: ${filename}`);
+                
+                const response = await fetch(filename);
+                if (!response.ok) {
+                    throw new Error(`HTTP-Fehler: ${response.status}`);
+                }
+                
+                const csvText = await response.text();
+                if (parseCSVLevel(csvText)) {
+                    console.log(`Level aus ${filename} erfolgreich geladen`);
+                    return true;
+                } else {
+                    throw new Error("Fehler beim Parsen des CSV-Levels");
+                }
+            } catch (error) {
+                console.error(`Fehler beim Laden des Levels aus Datei ${filename}:`, error);
+                return false;
+            }
+        }
     </script>
 </body>
 </html> 
