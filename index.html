@@ -191,36 +191,30 @@
                 this.masterGain = null;
                 this.lastSoundPlayed = "-";
                 
-                // Debug-Elemente
-                this.audioStatus = document.getElementById('audio-status');
-                this.audioContextState = document.getElementById('audio-context-state');
-                this.lastSoundEl = document.getElementById('last-sound-played');
-                this.volumeLevel = document.getElementById('volume-level');
+                // Keine Debug-Elemente mehr vorhanden, also entferne die Referenzen
+                this.audioStatus = null;
+                this.audioContextState = null;
+                this.lastSoundEl = null;
+                this.volumeLevel = null;
                 
-                this.updateAudioStatus("Warte auf Benutzerinteraktion...");
+                // Log-Nachricht statt UI-Update
+                console.log("Audio-Status: Warte auf Benutzerinteraktion...");
                 
                 // Warte auf Benutzerinteraktion, bevor Audio initialisiert wird
                 document.addEventListener('click', () => this.initAudio(), { once: true });
                 document.addEventListener('keydown', () => this.initAudio(), { once: true });
                 
-                // Test-Sound-Button
-                document.getElementById('test-sound').addEventListener('click', () => {
-                    this.playTestSound();
-                });
+                // Test-Sound-Button entfernt, daher diese Zeile entfernen
             }
             
             updateAudioStatus(status) {
-                if (this.audioStatus) {
-                    this.audioStatus.textContent = status;
-                    console.log("Audio-Status:", status);
-                }
+                // Nur noch Logging, kein UI-Update mehr
+                console.log("Audio-Status:", status);
             }
             
             updateLastSound(sound) {
                 this.lastSoundPlayed = sound;
-                if (this.lastSoundEl) {
-                    this.lastSoundEl.textContent = sound;
-                }
+                console.log("Letzter Sound:", sound);
             }
             
             initAudio() {
@@ -241,17 +235,15 @@
                     this.masterGain.gain.value = 0.5; // 50% Lautstärke
                     this.masterGain.connect(this.audioContext.destination);
                     
-                    if (this.audioContextState) {
-                        this.audioContextState.textContent = this.audioContext.state;
-                    }
+                    // Keine UI-Updates mehr für audioContextState
+                    console.log("Audio Context State:", this.audioContext.state);
                     
                     this.updateAudioStatus("Audio initialisiert, Status: " + this.audioContext.state);
                     
                     // Status bei Änderung aktualisieren
                     this.audioContext.onstatechange = () => {
-                        if (this.audioContextState) {
-                            this.audioContextState.textContent = this.audioContext.state;
-                        }
+                        // Keine UI-Updates mehr für audioContextState
+                        console.log("Audio Context State geändert:", this.audioContext.state);
                         this.updateAudioStatus("Audio-Status geändert: " + this.audioContext.state);
                     };
                     
@@ -410,7 +402,7 @@
                 }
                 
                 this.updateAudioStatus(this.soundEnabled ? "Sound aktiviert" : "Sound deaktiviert");
-                this.volumeLevel.textContent = this.soundEnabled ? "50%" : "0%";
+                console.log("Volume:", this.soundEnabled ? "50%" : "0%");
                 
                 // Wenn Sound aktiviert wird, einen Testsound abspielen
                 if (this.soundEnabled) {
@@ -423,7 +415,7 @@
             setVolume(volume) {
                 if (this.masterGain) {
                     this.masterGain.gain.value = volume;
-                    this.volumeLevel.textContent = Math.round(volume * 100) + "%";
+                    console.log("Volume:", Math.round(volume * 100) + "%");
                 }
             }
             
