@@ -1285,11 +1285,11 @@
             GRID_HEIGHT = 32;
             
             // Werte aus den Einstellungen holen
-            const wallCount = parseInt(document.getElementById("wall-count").value);
-            const enemyCount = parseInt(document.getElementById("enemy-count").value);
-            const blockCount = parseInt(document.getElementById("block-count").value);
-            const barrelCount = parseInt(document.getElementById("barrel-count").value);
-            const plutoniumCount = parseInt(document.getElementById("plutonium-count").value);
+            const wallCount = parseInt(document.getElementById("wall-count").value) || 150;
+            const enemyCount = parseInt(document.getElementById("enemy-count").value) || 7;
+            const blockCount = parseInt(document.getElementById("block-count").value) || 20;
+            const barrelCount = parseInt(document.getElementById("barrel-count").value) || 3;
+            const plutoniumCount = parseInt(document.getElementById("plutonium-count").value) || 5;
             
             console.log(`Einstellungen: Wände=${wallCount}, Gegner=${enemyCount}, Blöcke=${blockCount}, Tonnen=${barrelCount}, Plutonium=${plutoniumCount}`);
             
@@ -1535,6 +1535,130 @@
             }
             
             console.log(`Element vom Typ ${type} an Position (${x},${y}) platziert`);
+            return true;
+        }
+        
+        // Außenwände erstellen
+        function createBorderWalls() {
+            console.log("Erstelle Außenwände...");
+            
+            for (let x = 0; x < GRID_WIDTH; x++) {
+                for (let y = 0; y < GRID_HEIGHT; y++) {
+                    if (x === 0 || x === GRID_WIDTH - 1 || y === 0 || y === GRID_HEIGHT - 1) {
+                        walls.push({ x, y });
+                    }
+                }
+            }
+            console.log(`${GRID_WIDTH * 2 + GRID_HEIGHT * 2 - 4} Außenwand-Elemente erstellt`);
+        }
+        
+        // Wandelemente erstellen mit garantierter Zugänglichkeit
+        function createAccessibleWalls(count) {
+            // Versuche, so viele Wände wie möglich zu platzieren
+            let placedWalls = 0;
+            let maxAttempts = count * 3; // Mehr Versuche als tatsächlich benötigte Wände
+            
+            console.log(`Versuche, ${count} Wände zu platzieren mit maximal ${maxAttempts} Versuchen`);
+            
+            for (let i = 0; i < maxAttempts && placedWalls < count; i++) {
+                // Zufällige Position für Wandelement
+                const x = Math.floor(Math.random() * (GRID_WIDTH - 4)) + 2;
+                const y = Math.floor(Math.random() * (GRID_HEIGHT - 4)) + 2;
+                
+                // Prüfe, ob Position bereits belegt ist oder zu nah am Spieler/Ausgang
+                if (isWall(x, y) || 
+                    (x === player.x && y === player.y) ||
+                    (x === exit.x && y === exit.y) ||
+                    (Math.abs(x - player.x) < 3 && Math.abs(y - player.y) < 3) || 
+                    (Math.abs(x - exit.x) < 3 && Math.abs(y - exit.y) < 3)) {
+                    continue;
+                }
+                
+                // Füge Wand temporär hinzu
+                walls.push({ x, y });
+                
+                // Prüfe, ob das Level noch zugänglich ist
+                if (!isLevelAccessible()) {
+                    // Wenn nicht, entferne die letzte Wand wieder
+                    walls.pop();
+                    continue;
+                }
+                
+                // Wand erfolgreich platziert
+                placedWalls++;
+                
+                if (placedWalls % 20 === 0 || placedWalls === count) {
+                    console.log(`${placedWalls} von ${count} Wänden platziert (Versuch ${i+1})`);
+                }
+            }
+            
+            console.log(`Insgesamt ${placedWalls} von ${count} angeforderten Wandelementen platziert`);
+        }
+        
+        // Level-Zugänglichkeit prüfen
+        function isLevelAccessible() {
+            // Wir erstellen eine Kopie des Grids und markieren erreichbare Zellen
+            // 0 = unbesucht, 1 = besucht, 2 = Wand
+            const grid = Array(GRID_HEIGHT).fill().map(() => Array(GRID_WIDTH).fill(0));
+            
+            // Wände markieren
+            for (let wall of walls) {
+                if (wall.x >= 0 && wall.x < GRID_WIDTH && wall.y >= 0 && wall.y < GRID_HEIGHT) {
+                    grid[wall.y][wall.x] = 2;
+                }
+            }
+            
+            // Startpunkt markieren
+            const queue = [{ x: player.x, y: player.y }];
+            grid[player.y][player.x] = 1;
+            
+            // Besuche alle erreichbaren Zellen mit Breitensuche
+            while (queue.length > 0) {
+                const current = queue.shift();
+                
+                // Nachbarzellen überprüfen
+                const neighbors = [
+                    { x: current.x, y: current.y - 1 }, // Oben
+                    { x: current.x + 1, y: current.y }, // Rechts
+                    { x: current.x, y: current.y + 1 }, // Unten
+                    { x: current.x - 1, y: current.y }  // Links
+                ];
+                
+                for (let neighbor of neighbors) {
+                    // Prüfen, ob im Spielfeld und noch nicht besucht und keine Wand
+                    if (neighbor.x >= 0 && neighbor.x < GRID_WIDTH && 
+                        neighbor.y >= 0 && neighbor.y < GRID_HEIGHT && 
+                        grid[neighbor.y][neighbor.x] === 0) {
+                        
+                        grid[neighbor.y][neighbor.x] = 1;
+                        queue.push(neighbor);
+                    }
+                }
+            }
+            
+            // Prüfen, ob der Ausgang erreichbar ist
+            if (grid[exit.y][exit.x] !== 1) {
+                console.log("Der Ausgang ist nicht erreichbar, verwerfe diese Wandplatzierung.");
+                return false;
+            }
+            
+            // Prüfen, ob genug freier Platz für Gegner, Plutonium, etc. verfügbar ist
+            const minFreeSpace = 200; // Mindestanzahl freier Zellen
+            let freeCount = 0;
+            
+            for (let y = 0; y < GRID_HEIGHT; y++) {
+                for (let x = 0; x < GRID_WIDTH; x++) {
+                    if (grid[y][x] === 1) {
+                        freeCount++;
+                    }
+                }
+            }
+            
+            if (freeCount < minFreeSpace) {
+                console.log(`Nicht genug freier Platz (${freeCount}/${minFreeSpace}), verwerfe diese Wandplatzierung.`);
+                return false;
+            }
+            
             return true;
         }
     </script>
