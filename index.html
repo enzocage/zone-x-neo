@@ -105,7 +105,15 @@
             <p>Sammle alle Plutonium-Elemente und bringe sie zu den Tonnen. Erreiche dann den Ausgang.</p>
             <p>Steuerung: W, A, S, D zum Bewegen, Leertaste zum Platzieren von Blocks, Mausrad zum Zoomen.</p>
             
-            <div class="level-selection" style="margin: 20px 0;">
+            <!-- Auswahl zwischen normalem Level und Zufallslevel -->
+            <div class="level-type-selection" style="margin: 20px 0;">
+                <label style="margin-right: 10px; color: white;">Level-Typ:</label>
+                <button id="standard-level-btn" class="selected-btn" style="background-color: #00aa00; color: white; border: none; padding: 5px 10px; margin-right: 5px; border-radius: 3px; cursor: pointer;">Standard Level</button>
+                <button id="random-level-btn" style="background-color: #555; color: white; border: none; padding: 5px 10px; margin-right: 5px; border-radius: 3px; cursor: pointer;">Zufallslevel</button>
+            </div>
+            
+            <!-- Dropdown für Standardlevel -->
+            <div id="standard-level-options" class="level-selection" style="margin: 20px 0;">
                 <label for="level-select" style="margin-right: 10px; color: white;">Level auswählen:</label>
                 <select id="level-select" style="padding: 5px; border-radius: 3px; background-color: #333; color: white; border: 1px solid #555;">
                     <option value="1">Level 1</option>
@@ -120,6 +128,41 @@
                     <option value="10">Level 10</option>
                     <option value="11">Level 11</option>
                 </select>
+            </div>
+            
+            <!-- Einstellungen für Zufallslevel -->
+            <div id="random-level-options" class="level-selection" style="margin: 20px 0; display: none; max-width: 400px;">
+                <div style="text-align: left; margin-bottom: 15px; color: #00ff00;">Zufallslevel-Einstellungen:</div>
+                
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                    <label for="wall-count" style="color: white; text-align: left; width: 180px;">Wandelemente:</label>
+                    <input type="number" id="wall-count" min="50" max="500" value="150" style="width: 60px; padding: 3px; background-color: #333; color: white; border: 1px solid #555;">
+                    <input type="range" min="50" max="500" value="150" id="wall-count-slider" style="flex-grow: 1; margin-left: 10px;">
+                </div>
+                
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                    <label for="enemy-count" style="color: white; text-align: left; width: 180px;">Gegner:</label>
+                    <input type="number" id="enemy-count" min="1" max="20" value="7" style="width: 60px; padding: 3px; background-color: #333; color: white; border: 1px solid #555;">
+                    <input type="range" min="1" max="20" value="7" id="enemy-count-slider" style="flex-grow: 1; margin-left: 10px;">
+                </div>
+                
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                    <label for="block-count" style="color: white; text-align: left; width: 180px;">Mats:</label>
+                    <input type="number" id="block-count" min="5" max="50" value="20" style="width: 60px; padding: 3px; background-color: #333; color: white; border: 1px solid #555;">
+                    <input type="range" min="5" max="50" value="20" id="block-count-slider" style="flex-grow: 1; margin-left: 10px;">
+                </div>
+                
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                    <label for="barrel-count" style="color: white; text-align: left; width: 180px;">Tonnen:</label>
+                    <input type="number" id="barrel-count" min="1" max="10" value="3" style="width: 60px; padding: 3px; background-color: #333; color: white; border: 1px solid #555;">
+                    <input type="range" min="1" max="10" value="3" id="barrel-count-slider" style="flex-grow: 1; margin-left: 10px;">
+                </div>
+                
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                    <label for="plutonium-count" style="color: white; text-align: left; width: 180px;">Plutonium:</label>
+                    <input type="number" id="plutonium-count" min="1" max="10" value="5" style="width: 60px; padding: 3px; background-color: #333; color: white; border: 1px solid #555;">
+                    <input type="range" min="1" max="10" value="5" id="plutonium-count-slider" style="flex-grow: 1; margin-left: 10px;">
+                </div>
             </div>
             
             <button id="start-button">Spiel starten</button>
@@ -206,6 +249,9 @@
             'I': 'item'          // Item (nicht implementiert)
         };
         
+        // Flag für Zufallslevel
+        let isRandomLevel = false;
+        
         // Initialisierung
         function init() {
             console.log("Initialisiere 2D-Fallback...");
@@ -267,7 +313,13 @@
             // Level-spezifische Einstellungen
             resetGame();
             
-            // Versuche, das Level aus der CSV-Datei zu laden
+            // Wenn Zufallslevel gewählt wurde, generiere ein Zufallslevel
+            if (isRandomLevel) {
+                generateRandomAccessibleLevel();
+                return;
+            }
+            
+            // Ansonsten versuche, das Level aus der CSV-Datei zu laden
             if (await loadLevelFromCSV(level)) {
                 console.log("CSV-Level erfolgreich geladen");
             } else {
@@ -1157,13 +1209,292 @@
         
         // Start-Button-Handler
         document.getElementById('start-button').addEventListener('click', function() {
-            // Level aus dem Dropdown-Menü holen
-            const levelSelect = document.getElementById('level-select');
-            currentLevel = parseInt(levelSelect.value);
+            if (isRandomLevel) {
+                // Bei Zufallslevel wird kein Level-Index benötigt
+                currentLevel = 1; // Setze trotzdem auf 1, falls später benötigt
+            } else {
+                // Level aus dem Dropdown-Menü holen
+                const levelSelect = document.getElementById('level-select');
+                currentLevel = parseInt(levelSelect.value);
+            }
             
             document.getElementById('start-screen').classList.add('hidden');
             init();
         });
+        
+        // Handler für Wechsel zwischen Standard- und Zufallslevel
+        document.getElementById('standard-level-btn').addEventListener('click', function() {
+            isRandomLevel = false;
+            document.getElementById('standard-level-options').style.display = 'block';
+            document.getElementById('random-level-options').style.display = 'none';
+            document.getElementById('standard-level-btn').style.backgroundColor = '#00aa00';
+            document.getElementById('random-level-btn').style.backgroundColor = '#555';
+        });
+        
+        document.getElementById('random-level-btn').addEventListener('click', function() {
+            isRandomLevel = true;
+            document.getElementById('standard-level-options').style.display = 'none';
+            document.getElementById('random-level-options').style.display = 'block';
+            document.getElementById('standard-level-btn').style.backgroundColor = '#555';
+            document.getElementById('random-level-btn').style.backgroundColor = '#00aa00';
+        });
+        
+        // Slider und Input-Feld synchronisieren
+        function setupSliderInputSync(sliderId, inputId) {
+            const slider = document.getElementById(sliderId);
+            const input = document.getElementById(inputId);
+            
+            slider.addEventListener('input', function() {
+                input.value = slider.value;
+            });
+            
+            input.addEventListener('input', function() {
+                if (input.value < input.min) input.value = input.min;
+                if (input.value > input.max) input.value = input.max;
+                slider.value = input.value;
+            });
+        }
+        
+        // Synchronisierung für alle Slider einrichten
+        window.addEventListener('DOMContentLoaded', function() {
+            setupSliderInputSync('wall-count-slider', 'wall-count');
+            setupSliderInputSync('enemy-count-slider', 'enemy-count');
+            setupSliderInputSync('block-count-slider', 'block-count');
+            setupSliderInputSync('barrel-count-slider', 'barrel-count');
+            setupSliderInputSync('plutonium-count-slider', 'plutonium-count');
+        });
+        
+        // Zufälliges Level generieren mit sichergestellter Zugänglichkeit
+        function generateRandomAccessibleLevel() {
+            console.log("Generiere zufälliges Level mit garantierter Zugänglichkeit...");
+            
+            // Spielfeldgröße auf Standard setzen
+            GRID_WIDTH = 64;
+            GRID_HEIGHT = 32;
+            
+            // Werte aus den Einstellungen holen
+            const wallCount = parseInt(document.getElementById("wall-count").value);
+            const enemyCount = parseInt(document.getElementById("enemy-count").value);
+            const blockCount = parseInt(document.getElementById("block-count").value);
+            const barrelCount = parseInt(document.getElementById("barrel-count").value);
+            const plutoniumCount = parseInt(document.getElementById("plutonium-count").value);
+            
+            // Arrays zurücksetzen
+            walls = [];
+            enemies = [];
+            plutonium = [];
+            barrels = [];
+            blocks = [];
+            collectibleBlocks = [];
+            
+            // Spieler und Ausgang positionieren
+            player.x = 2;
+            player.y = 2;
+            player.visualX = 2;
+            player.visualY = 2;
+            player.lastX = 2;
+            player.lastY = 2;
+            
+            exit = { x: GRID_WIDTH - 5, y: GRID_HEIGHT - 5 };
+            
+            // Außenwände erstellen
+            createBorderWalls();
+            
+            // Wandelemente erstellen und Erreichbarkeit sicherstellen
+            createAccessibleWalls(wallCount);
+            
+            // Gegner platzieren
+            for (let i = 0; i < enemyCount; i++) {
+                placeRandomElement('enemy');
+            }
+            
+            // Plutonium platzieren
+            for (let i = 0; i < plutoniumCount; i++) {
+                placeRandomElement('plutonium');
+            }
+            
+            // Tonnen platzieren
+            for (let i = 0; i < barrelCount; i++) {
+                placeRandomElement('barrel');
+            }
+            
+            // Blöcke platzieren
+            for (let i = 0; i < blockCount; i++) {
+                placeRandomElement('block');
+            }
+            
+            // Startblöcke setzen
+            blocksCount = 15;
+            
+            console.log("Zufälliges Level erfolgreich generiert");
+        }
+        
+        // Außenwände erstellen
+        function createBorderWalls() {
+            for (let x = 0; x < GRID_WIDTH; x++) {
+                for (let y = 0; y < GRID_HEIGHT; y++) {
+                    if (x === 0 || x === GRID_WIDTH - 1 || y === 0 || y === GRID_HEIGHT - 1) {
+                        walls.push({ x, y });
+                    }
+                }
+            }
+        }
+        
+        // Zufälliges Element platzieren
+        function placeRandomElement(type) {
+            let x, y;
+            let validPosition = false;
+            
+            // Maximale Anzahl von Versuchen, eine gültige Position zu finden
+            let attempts = 0;
+            const maxAttempts = 100;
+            
+            while (!validPosition && attempts < maxAttempts) {
+                attempts++;
+                
+                x = Math.floor(Math.random() * (GRID_WIDTH - 4)) + 2;
+                y = Math.floor(Math.random() * (GRID_HEIGHT - 4)) + 2;
+                
+                // Allgemeine Gültigkeitsprüfung
+                if (isWall(x, y) || 
+                    isEnemy(x, y) || 
+                    isPlutonium(x, y) || 
+                    isBarrel(x, y) || 
+                    isCollectibleBlock(x, y) ||
+                    (Math.abs(x - player.x) < 3 && Math.abs(y - player.y) < 3) || // Bereich um Spieler freihalten
+                    (Math.abs(x - exit.x) < 3 && Math.abs(y - exit.y) < 3)) {     // Bereich um Ausgang freihalten
+                    continue;
+                }
+                
+                validPosition = true;
+            }
+            
+            if (!validPosition) {
+                console.warn(`Konnte keine gültige Position für ${type} finden.`);
+                return;
+            }
+            
+            // Element basierend auf Typ erstellen
+            switch (type) {
+                case 'enemy':
+                    enemies.push({
+                        x, y,
+                        visualX: x,
+                        visualY: y,
+                        direction: Math.floor(Math.random() * 4),
+                        speed: 1 + Math.random() * 0.5
+                    });
+                    break;
+                case 'plutonium':
+                    plutonium.push({ x, y });
+                    break;
+                case 'barrel':
+                    barrels.push({ x, y });
+                    break;
+                case 'block':
+                    collectibleBlocks.push({ x, y });
+                    break;
+            }
+        }
+        
+        // Prüfen, ob eine Position einen sammelbaren Block enthält
+        function isCollectibleBlock(x, y) {
+            return collectibleBlocks.some(block => block.x === x && block.y === y);
+        }
+        
+        // Wandelemente erstellen mit garantierter Zugänglichkeit
+        function createAccessibleWalls(count) {
+            // Versuche, so viele Wände wie möglich zu platzieren
+            let placedWalls = 0;
+            let maxAttempts = count * 3; // Mehr Versuche als tatsächlich benötigte Wände
+            
+            for (let i = 0; i < maxAttempts && placedWalls < count; i++) {
+                // Zufällige Position für Wandelement
+                const x = Math.floor(Math.random() * (GRID_WIDTH - 4)) + 2;
+                const y = Math.floor(Math.random() * (GRID_HEIGHT - 4)) + 2;
+                
+                // Prüfe, ob Position bereits belegt ist oder zu nah am Spieler/Ausgang
+                if (isWall(x, y) || 
+                    (Math.abs(x - player.x) < 3 && Math.abs(y - player.y) < 3) || 
+                    (Math.abs(x - exit.x) < 3 && Math.abs(y - exit.y) < 3)) {
+                    continue;
+                }
+                
+                // Füge Wand temporär hinzu
+                walls.push({ x, y });
+                
+                // Prüfe, ob das Level noch zugänglich ist
+                if (!isLevelAccessible()) {
+                    // Wenn nicht, entferne die letzte Wand wieder
+                    walls.pop();
+                    continue;
+                }
+                
+                // Wand erfolgreich platziert
+                placedWalls++;
+            }
+            
+            console.log(`${placedWalls} von ${count} Wänden platziert`);
+        }
+        
+        // Prüfen, ob alle wichtigen Bereiche des Levels erreichbar sind
+        function isLevelAccessible() {
+            // Wir erstellen eine Kopie des Grids und markieren erreichbare Zellen
+            // 0 = unbesucht, 1 = besucht, 2 = Wand
+            const grid = Array(GRID_HEIGHT).fill().map(() => Array(GRID_WIDTH).fill(0));
+            
+            // Wände markieren
+            for (let wall of walls) {
+                grid[wall.y][wall.x] = 2;
+            }
+            
+            // Startpunkt markieren
+            const queue = [{ x: player.x, y: player.y }];
+            grid[player.y][player.x] = 1;
+            
+            // Besuche alle erreichbaren Zellen mit Breitensuche
+            while (queue.length > 0) {
+                const current = queue.shift();
+                
+                // Nachbarzellen überprüfen
+                const neighbors = [
+                    { x: current.x, y: current.y - 1 }, // Oben
+                    { x: current.x + 1, y: current.y }, // Rechts
+                    { x: current.x, y: current.y + 1 }, // Unten
+                    { x: current.x - 1, y: current.y }  // Links
+                ];
+                
+                for (let neighbor of neighbors) {
+                    // Prüfen, ob im Spielfeld und noch nicht besucht und keine Wand
+                    if (neighbor.x >= 0 && neighbor.x < GRID_WIDTH && 
+                        neighbor.y >= 0 && neighbor.y < GRID_HEIGHT && 
+                        grid[neighbor.y][neighbor.x] === 0) {
+                        
+                        grid[neighbor.y][neighbor.x] = 1;
+                        queue.push(neighbor);
+                    }
+                }
+            }
+            
+            // Prüfen, ob der Ausgang erreichbar ist
+            if (grid[exit.y][exit.x] !== 1) {
+                return false;
+            }
+            
+            // Prüfen, ob genug freier Platz für Gegner, Plutonium, etc. verfügbar ist
+            const minFreeSpace = 200; // Mindestanzahl freier Zellen
+            let freeCount = 0;
+            
+            for (let y = 0; y < GRID_HEIGHT; y++) {
+                for (let x = 0; x < GRID_WIDTH; x++) {
+                    if (grid[y][x] === 1) {
+                        freeCount++;
+                    }
+                }
+            }
+            
+            return freeCount >= minFreeSpace;
+        }
     </script>
 </body>
 </html> 
