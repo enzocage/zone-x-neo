@@ -1319,32 +1319,61 @@
             createAccessibleWalls(wallCount);
             console.log(`Innenwände erstellt: ${walls.length - (GRID_WIDTH * 2 + GRID_HEIGHT * 2 - 4)} von ${wallCount} angeforderten Wandelementen`);
             
+            let placedEnemies = 0;
+            let placedPlutonium = 0;
+            let placedBarrels = 0;
+            let placedBlocks = 0;
+            
             // Gegner platzieren
+            console.log(`Versuche, ${enemyCount} Gegner zu platzieren...`);
             for (let i = 0; i < enemyCount; i++) {
-                placeRandomElement('enemy');
+                if (placeRandomElement('enemy')) {
+                    placedEnemies++;
+                }
             }
             console.log(`Gegner platziert: ${enemies.length} von ${enemyCount}`);
             
             // Plutonium platzieren
+            console.log(`Versuche, ${plutoniumCount} Plutonium zu platzieren...`);
             for (let i = 0; i < plutoniumCount; i++) {
-                placeRandomElement('plutonium');
+                if (placeRandomElement('plutonium')) {
+                    placedPlutonium++;
+                }
             }
             console.log(`Plutonium platziert: ${plutonium.length} von ${plutoniumCount}`);
             
             // Tonnen platzieren
+            console.log(`Versuche, ${barrelCount} Tonnen zu platzieren...`);
             for (let i = 0; i < barrelCount; i++) {
-                placeRandomElement('barrel');
+                if (placeRandomElement('barrel')) {
+                    placedBarrels++;
+                }
             }
             console.log(`Tonnen platziert: ${barrels.length} von ${barrelCount}`);
             
             // Blöcke platzieren
+            console.log(`Versuche, ${blockCount} Blöcke zu platzieren...`);
             for (let i = 0; i < blockCount; i++) {
-                placeRandomElement('block');
+                if (placeRandomElement('block')) {
+                    placedBlocks++;
+                }
             }
             console.log(`Blöcke platziert: ${collectibleBlocks.length} von ${blockCount}`);
             
             // Startblöcke setzen
             blocksCount = 15;
+            
+            // Alternativ: Zwangsplatzierung, falls nicht genug Elemente platziert wurden
+            // Dies stellt sicher, dass das Level immer genügend Elemente enthält
+            if (placedPlutonium === 0) {
+                console.log("WARNUNG: Keine Plutonium-Elemente platziert. Füge einige mit weniger strengen Kriterien hinzu.");
+                forcePlaceElements('plutonium', Math.max(1, plutoniumCount / 2));
+            }
+            
+            if (placedBarrels === 0) {
+                console.log("WARNUNG: Keine Tonnen platziert. Füge einige mit weniger strengen Kriterien hinzu.");
+                forcePlaceElements('barrel', Math.max(1, barrelCount / 2));
+            }
             
             // Debugging: Prüfe, ob im Level-Grid Elemente korrekt platziert sind
             let gridDebug = Array(GRID_HEIGHT).fill().map(() => Array(GRID_WIDTH).fill('.'));
@@ -1381,15 +1410,56 @@
             console.log("Zufälliges Level erfolgreich generiert");
         }
         
-        // Außenwände erstellen
-        function createBorderWalls() {
-            for (let x = 0; x < GRID_WIDTH; x++) {
-                for (let y = 0; y < GRID_HEIGHT; y++) {
-                    if (x === 0 || x === GRID_WIDTH - 1 || y === 0 || y === GRID_HEIGHT - 1) {
-                        walls.push({ x, y });
+        // Elemente mit weniger strengen Kriterien platzieren (Notfall-Funktion)
+        function forcePlaceElements(type, count) {
+            console.log(`Force-Platzierung: Versuche, ${count} ${type}-Elemente zu platzieren...`);
+            let placed = 0;
+            
+            for (let i = 0; i < count; i++) {
+                let x, y;
+                let foundPosition = false;
+                
+                // Suche nach irgendwelchen freien Positions
+                for (let attempt = 0; attempt < 50; attempt++) {
+                    x = Math.floor(Math.random() * (GRID_WIDTH - 4)) + 2;
+                    y = Math.floor(Math.random() * (GRID_HEIGHT - 4)) + 2;
+                    
+                    // Nur grundlegende Überprüfungen
+                    if (!isWall(x, y) && !isEnemy(x, y) && !isPlutonium(x, y) && !isBarrel(x, y) && 
+                        (x !== player.x || y !== player.y) && (x !== exit.x || y !== exit.y)) {
+                        foundPosition = true;
+                        break;
                     }
                 }
+                
+                if (foundPosition) {
+                    // Element basierend auf Typ erstellen
+                    switch (type) {
+                        case 'enemy':
+                            enemies.push({
+                                x, y,
+                                visualX: x,
+                                visualY: y,
+                                direction: Math.floor(Math.random() * 4),
+                                speed: 1 + Math.random() * 0.5
+                            });
+                            break;
+                        case 'plutonium':
+                            plutonium.push({ x, y });
+                            break;
+                        case 'barrel':
+                            barrels.push({ x, y });
+                            break;
+                        case 'block':
+                            collectibleBlocks.push({ x, y });
+                            break;
+                    }
+                    placed++;
+                    console.log(`Force-platziert: ${type} an Position (${x},${y})`);
+                }
             }
+            
+            console.log(`Force-Platzierung: ${placed} von ${count} ${type}-Elementen platziert`);
         }
         
         // Zufälliges Element platzieren
@@ -1401,31 +1471,45 @@
             let attempts = 0;
             const maxAttempts = 100;
             
+            console.log(`Versuche, ein Element vom Typ ${type} zu platzieren...`);
+            
             while (!validPosition && attempts < maxAttempts) {
                 attempts++;
                 
                 x = Math.floor(Math.random() * (GRID_WIDTH - 4)) + 2;
                 y = Math.floor(Math.random() * (GRID_HEIGHT - 4)) + 2;
                 
-                // Allgemeine Gültigkeitsprüfung
-                if (isWall(x, y) || 
-                    isEnemy(x, y) || 
-                    isPlutonium(x, y) || 
-                    isBarrel(x, y) || 
-                    isCollectibleBlock(x, y) ||
-                    (x === player.x && y === player.y) ||
-                    (x === exit.x && y === exit.y) ||
-                    (Math.abs(x - player.x) < 3 && Math.abs(y - player.y) < 3) || // Bereich um Spieler freihalten
-                    (Math.abs(x - exit.x) < 3 && Math.abs(y - exit.y) < 3)) {     // Bereich um Ausgang freihalten
+                // Prüfen, ob die Position bereits belegt ist
+                const isPositionOccupied = isWall(x, y) || 
+                                         isEnemy(x, y) || 
+                                         isPlutonium(x, y) || 
+                                         isBarrel(x, y) || 
+                                         isCollectibleBlock(x, y);
+                
+                // Prüfen, ob die Position mit Spieler oder Ausgang kollidiert
+                const isPlayerOrExit = (x === player.x && y === player.y) || 
+                                      (x === exit.x && y === exit.y);
+                
+                // Prüfen, ob die Position zu nah am Spieler oder Ausgang ist
+                // Toleranzbereich deutlich reduzieren, um mehr valide Positionen zu finden
+                const isTooCloseToPlayer = Math.abs(x - player.x) < 2 && Math.abs(y - player.y) < 2;
+                const isTooCloseToExit = Math.abs(x - exit.x) < 2 && Math.abs(y - exit.y) < 2;
+                
+                if (isPositionOccupied || isPlayerOrExit || isTooCloseToPlayer || isTooCloseToExit) {
+                    if (attempts % 20 === 0) {
+                        console.log(`Versuch ${attempts}/${maxAttempts} für ${type}: Position (${x},${y}) ist nicht gültig.`);
+                        console.log(`  - Belegt: ${isPositionOccupied}, Spieler/Ausgang: ${isPlayerOrExit}, Nähe Spieler: ${isTooCloseToPlayer}, Nähe Ausgang: ${isTooCloseToExit}`);
+                    }
                     continue;
                 }
                 
                 validPosition = true;
+                console.log(`Gültige Position für ${type} gefunden: (${x},${y}) nach ${attempts} Versuchen.`);
             }
             
             if (!validPosition) {
                 console.warn(`Konnte keine gültige Position für ${type} finden nach ${maxAttempts} Versuchen.`);
-                return;
+                return false;
             }
             
             // Element basierend auf Typ erstellen
@@ -1450,118 +1534,8 @@
                     break;
             }
             
-            // Debug-Ausgabe für die Platzierung dieses Elements
             console.log(`Element vom Typ ${type} an Position (${x},${y}) platziert`);
-        }
-        
-        // Level-Zugänglichkeit prüfen
-        function isLevelAccessible() {
-            // Wir erstellen eine Kopie des Grids und markieren erreichbare Zellen
-            // 0 = unbesucht, 1 = besucht, 2 = Wand
-            const grid = Array(GRID_HEIGHT).fill().map(() => Array(GRID_WIDTH).fill(0));
-            
-            // Wände markieren
-            for (let wall of walls) {
-                if (wall.x >= 0 && wall.x < GRID_WIDTH && wall.y >= 0 && wall.y < GRID_HEIGHT) {
-                    grid[wall.y][wall.x] = 2;
-                }
-            }
-            
-            // Startpunkt markieren
-            const queue = [{ x: player.x, y: player.y }];
-            grid[player.y][player.x] = 1;
-            
-            // Besuche alle erreichbaren Zellen mit Breitensuche
-            while (queue.length > 0) {
-                const current = queue.shift();
-                
-                // Nachbarzellen überprüfen
-                const neighbors = [
-                    { x: current.x, y: current.y - 1 }, // Oben
-                    { x: current.x + 1, y: current.y }, // Rechts
-                    { x: current.x, y: current.y + 1 }, // Unten
-                    { x: current.x - 1, y: current.y }  // Links
-                ];
-                
-                for (let neighbor of neighbors) {
-                    // Prüfen, ob im Spielfeld und noch nicht besucht und keine Wand
-                    if (neighbor.x >= 0 && neighbor.x < GRID_WIDTH && 
-                        neighbor.y >= 0 && neighbor.y < GRID_HEIGHT && 
-                        grid[neighbor.y][neighbor.x] === 0) {
-                        
-                        grid[neighbor.y][neighbor.x] = 1;
-                        queue.push(neighbor);
-                    }
-                }
-            }
-            
-            // Prüfen, ob der Ausgang erreichbar ist
-            if (grid[exit.y][exit.x] !== 1) {
-                console.log("Der Ausgang ist nicht erreichbar, verwerfe diese Wandplatzierung.");
-                return false;
-            }
-            
-            // Prüfen, ob genug freier Platz für Gegner, Plutonium, etc. verfügbar ist
-            const minFreeSpace = 200; // Mindestanzahl freier Zellen
-            let freeCount = 0;
-            
-            for (let y = 0; y < GRID_HEIGHT; y++) {
-                for (let x = 0; x < GRID_WIDTH; x++) {
-                    if (grid[y][x] === 1) {
-                        freeCount++;
-                    }
-                }
-            }
-            
-            if (freeCount < minFreeSpace) {
-                console.log(`Nicht genug freier Platz (${freeCount}/${minFreeSpace}), verwerfe diese Wandplatzierung.`);
-                return false;
-            }
-            
             return true;
-        }
-        
-        // Wandelemente erstellen mit garantierter Zugänglichkeit
-        function createAccessibleWalls(count) {
-            // Versuche, so viele Wände wie möglich zu platzieren
-            let placedWalls = 0;
-            let maxAttempts = count * 3; // Mehr Versuche als tatsächlich benötigte Wände
-            
-            console.log(`Versuche, ${count} Wände zu platzieren mit maximal ${maxAttempts} Versuchen`);
-            
-            for (let i = 0; i < maxAttempts && placedWalls < count; i++) {
-                // Zufällige Position für Wandelement
-                const x = Math.floor(Math.random() * (GRID_WIDTH - 4)) + 2;
-                const y = Math.floor(Math.random() * (GRID_HEIGHT - 4)) + 2;
-                
-                // Prüfe, ob Position bereits belegt ist oder zu nah am Spieler/Ausgang
-                if (isWall(x, y) || 
-                    (x === player.x && y === player.y) ||
-                    (x === exit.x && y === exit.y) ||
-                    (Math.abs(x - player.x) < 3 && Math.abs(y - player.y) < 3) || 
-                    (Math.abs(x - exit.x) < 3 && Math.abs(y - exit.y) < 3)) {
-                    continue;
-                }
-                
-                // Füge Wand temporär hinzu
-                walls.push({ x, y });
-                
-                // Prüfe, ob das Level noch zugänglich ist
-                if (!isLevelAccessible()) {
-                    // Wenn nicht, entferne die letzte Wand wieder
-                    walls.pop();
-                    continue;
-                }
-                
-                // Wand erfolgreich platziert
-                placedWalls++;
-                
-                if (placedWalls % 20 === 0 || placedWalls === count) {
-                    console.log(`${placedWalls} von ${count} Wänden platziert (Versuch ${i+1})`);
-                }
-            }
-            
-            console.log(`Insgesamt ${placedWalls} von ${count} angeforderten Wandelementen platziert`);
         }
     </script>
 </body>
